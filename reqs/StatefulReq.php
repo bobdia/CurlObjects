@@ -16,7 +16,7 @@ class StatefulReq extends HttpReq {
 		if(is_null($state))
 			$state = $this->state;
 
-		$this->states[$state]['opts'][$opt] = $val;
+		$this->states[$state]['options'][$opt] = $val;
 
 	}
 
@@ -61,19 +61,19 @@ class StatefulReq extends HttpReq {
 	
 	public function attach($event,$callback,$position=1) {
 		// otherwise the $position param won't work for stateEvent 
-		if(!isset($this->eventReg[$event])) {
-			$this->eventReg[$event] = array(0);
+		if(!isset($this->events[$event])) {
+			$this->events[$event] = array(0);
 		}
 		
 		if($append === 1) {
 			// default, append to the end of the array
-			$this->eventReg[$event][] = $callback;
+			$this->events[$event][] = $callback;
 		} elseif($append === 0) {
 			// replace existing callback array
-			$this->eventReg[$event] = array($callback);
+			$this->events[$event] = array($callback);
 		} elseif($append === -1) {
 			// in the beginning of the array
-			$this->eventReg[$event] = array_unshift($this->eventReg[$event], $callback);
+			$this->events[$event] = array_unshift($this->events[$event], $callback);
 		}
 	}
 	
@@ -82,13 +82,13 @@ class StatefulReq extends HttpReq {
 
 		$stateEvent = $this->state . ucfirst($type);
 		if(method_exists($this,$stateEvent)) {
-			if(!isset($this->eventReg[$stateEvent])) {
-				$this->eventReg[$stateEvent] = array(0);
+			if(!isset($this->events[$stateEvent])) {
+				$this->events[$stateEvent] = array(0);
 			}
 
 		}
 
-		if(isset($this->eventReg[$stateEvent]) && is_array($this->eventReg[$stateEvent])) {
+		if(isset($this->events[$stateEvent]) && is_array($this->events[$stateEvent])) {
 			parent::event($stateEvent, $args);
 		}
 	}
