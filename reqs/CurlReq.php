@@ -69,7 +69,7 @@ class CurlReq {
 		if($socks) {
 			//CURLPROXY_SOCKS5
 			$this->options[CURLOPT_PROXYTYPE] = $socks;
-		}if($tunnel) {
+		}
 	}
 	
 	// set local network interface to use
