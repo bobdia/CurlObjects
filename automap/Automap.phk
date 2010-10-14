@@ -1,0 +1,2074 @@
+<?php                                                         ?><?php #PHK M M1.4.0        V1.4.0        FS171232      PO241         SSO88546       STO89163       FTO112399      SIO171232      CRC043a3cbd PCO800         PCS87746       ?><?php
+ if (!class_exists('PHK',0)) { $_phk_fp=fopen(__FILE__,'rb'); $_phk_buf=fread($_phk_fp,241); fseek($_phk_fp,(int)(substr($_phk_buf,212,11)),SEEK_SET); $_phk_size=(int)(substr($_phk_buf,227,11)); $_phk_code=''; while (strlen($_phk_code) < $_phk_size) $_phk_code .=fread($_phk_fp,$_phk_size-strlen($_phk_code)); fclose($_phk_fp); eval($_phk_code); unset($_phk_code); unset($_phk_fp); unset($_phk_buf); unset($_phk_size); } $_phk_cmd=null; $_phk_ret=0; PHK::prolog(__FILE__,$_phk_cmd,$_phk_ret); eval($_phk_cmd); return $_phk_ret; __halt_compiler(); ?>ÿÿÿÿ
+ if (!class_exists('Automap',false)) { class Automap { const VERSION='1.1.0'; const MAGIC="AUTOMAP  M\024\x8\6\3"; const T_FUNCTION='F'; const T_CONSTANT='C'; const T_CLASS='L'; const T_EXTENSION='E'; const F_SCRIPT='S'; const F_EXTENSION='X'; const F_PACKAGE='P'; private static $type_strings=array( self::T_FUNCTION => 'function', self::T_CONSTANT => 'constant', self::T_CLASS => 'class', self::T_EXTENSION => 'extension', self::F_SCRIPT => 'script', self::F_EXTENSION => 'extension file', self::F_PACKAGE => 'package' ); private static $failure_handlers=array(); private static $success_handlers=array(); private static $support_constant_autoload; private static $support_function_autoload; private static $automaps; private static $mount_order; private static function is_web() { return (php_sapi_name()!='cli'); } private static $simul_inode_array=array(); private static $simul_inode_index=1; private static function path_unique_id($prefix,$path,&$mtime) { if (($s=stat($path))===false) throw new Exception("$path: File not found"); $dev=$s[0]; $inode=$s[1]; $mtime=$s[9]; if ($inode==0) { $rpath=realpath($path); if ($rpath === false) throw new Exception("$path: Cannot compute realpath"); if (isset(self::$simul_inode_array[$rpath])) $inode=self::$simul_inode_array[$rpath]; else { $inode=self::$simul_inode_index++; self::$simul_inode_array[$rpath]=$inode; } } return sprintf('%s_%X_%X_%X',$prefix,$dev,$inode,$mtime); } public static function init() { self::$automaps=array(); self::$mount_order=array(); $f=new ReflectionFunction('function_exists'); self::$support_function_autoload=($f->getNumberOfParameters()==2); $f=new ReflectionFunction('defined'); self::$support_constant_autoload=($f->getNumberOfParameters()==2); } public static function register_failure_handler($callable) { self::$failure_handlers[]=$callable; } public static function register_success_handler($callable) { self::$success_handlers[]=$callable; } public static function key($type,$symbol) { if (($type==self::T_EXTENSION) ||($type==self::T_FUNCTION) ||($type==self::T_CLASS)) $symbol=strtolower($symbol); return $type.$symbol; } public static function get_type_from_key($key) { if (strlen($key) <= 1) throw new Exception('Invalid key'); return $key{0}; } public static function get_symbol_from_key($key) { if (strlen($key) <= 1) throw new Exception('Invalid key'); return substr($key,1,strcspn($key,'|',1)); } public static function get_type_string($type) { if (!isset(self::$type_strings[$type])) throw new Exception("$type: Invalid type"); return self::$type_strings[$type]; } public static function string_to_type($string) { $type=array_search($string,self::$type_strings,true); if ($type===false) throw new Exception("$type: Invalid type"); return $type; } public static function is_mounted($mnt) { return isset(self::$automaps[$mnt]); } public static function validate($mnt) { if (!self::is_mounted($mnt)) throw new Exception($mnt.': Invalid mount point'); return $mnt; } public static function instance($mnt) { self::validate($mnt); return self::$automaps[$mnt]; } public static function mnt_list() { return array_keys(self::$automaps); } public static function path_to_mnt($path) { $dummy=null; $mnt=self::path_unique_id('m',$path,$dummy); if (self::is_mounted($mnt)) return $mnt; throw new Exception($path.': path is not mounted'); } public static function mount($path,$base_dir=null,$mnt=null,$flags=0) { try { if (is_null($mnt)) { $dummy=null; $mnt=self::path_unique_id('m',$path,$dummy); } if (self::is_mounted($mnt)) { self::instance($mnt)->mnt_count++; return $mnt; } if (is_null($base_dir)) { $base_dir=dirname($path); if (($base_dir!=='/') && ($base_dir!=='\\')) $base_dir .= DIRECTORY_SEPARATOR; } self::$mount_order[] =self::$automaps[$mnt]=new self($path,$base_dir,$mnt,$flags); } catch (Exception $e) { if (isset($mnt) && self::is_mounted($mnt)) unset(self::$automaps[$mnt]); throw new Exception($path.': Cannot mount - '.$e->getMessage()); } return $mnt; } public static function umount($mnt) { if (self::is_mounted($mnt)) { $map=self::instance($mnt); if ((--$map->mnt_count) > 0) return; foreach (self::$mount_order as $order => $obj) { if ($obj===$map) self::$mount_order[$order]=null; } unset(self::$automaps[$mnt]); } } private static function symbol_is_defined($type,$symbol) { switch($type) { case self::T_CONSTANT: return (self::$support_constant_autoload ? defined($symbol,false) : defined($symbol)); case self::T_FUNCTION: return (self::$support_function_autoload ? function_exists($symbol,false) : function_exists($symbol)); case self::T_CLASS: return class_exists($symbol,false) || interface_exists($symbol,false); case self::T_EXTENSION: return extension_loaded($symbol); } } public static function autoload_hook($symbol,$type=self::T_CLASS) { self::get_symbol($type,$symbol,true,false); } private static function get_symbol($type,$symbol,$autoload=false ,$exception=false) { if (!$autoload) { if (self::symbol_is_defined($type,$symbol)) return true; } $key=self::key($type,$symbol); foreach(array_reverse(self::$mount_order) as $map) { if ((!is_null($map)) && $map->resolve_key($key)) return true; } foreach (self::$failure_handlers as $callable) $callable($key); if ($exception) throw new Exception('Automap: Unknown ' .self::get_type_string($type).': '.$symbol); return false; } public static function get_function($symbol) { return self::get_symbol(self::T_FUNCTION,$symbol,false,false); } public static function get_constant($symbol) { return self::get_symbol(self::T_CONSTANT,$symbol,false,false); } public static function get_class($symbol) { return self::get_symbol(self::T_CLASS,$symbol,false,false); } public static function get_extension($symbol) { return self::get_symbol(self::T_EXTENSION,$symbol,false,false); } public static function require_function($symbol) { return self::get_symbol(self::T_FUNCTION,$symbol,false,true); } public static function require_constant($symbol) { return self::get_symbol(self::T_CONSTANT,$symbol,false,true); } public static function require_class($symbol) { return self::get_symbol(self::T_CLASS,$symbol,false,true); } public static function require_extension($symbol) { return self::get_symbol(self::T_EXTENSION,$symbol,false,true); } private $path; private $base_dir; private $mnt; private $flags; private $mnt_count; private $symbols=null; private $options=null; private $version; private $min_version; private function __construct($path,$base_dir,$mnt,$flags=0) { $this->path=$path; $this->mnt=$mnt; $this->base_dir=$base_dir; $this->flags=$flags; $this->mnt_count=1; } private function realize() { if (!is_null($this->symbols)) return; try { if (($buf=@file_get_contents($this->path))===false) throw new Exception($this->path.': Cannot read map file'); if (substr($buf,0,14)!=self::MAGIC) throw new Exception('Bad Magic'); $this->min_version=trim(substr($buf,16,12)); if (version_compare($this->min_version,self::VERSION) > 0) throw new Exception('Cannot understand this automap.'. ' Requires at least Automap version '.$this->min_version); $this->version=trim(substr($buf,30,12)); if (strlen($buf)!=($sz=(int)substr($buf,45,8))) throw new Exception('Invalid file size. Should be '.$sz); if (($buf=unserialize(substr($buf,53)))===false) throw new Exception('Cannot unserialize data from map file'); if (!is_array($buf)) throw new Exception('Map file should contain an array'); if (!array_key_exists('map',$buf)) throw new Exception('No symbol table'); if (!array_key_exists('options',$buf)) throw new Exception('No options array'); if (!is_array($this->symbols=$buf['map'])) throw new Exception('Symbol table should contain an array'); if (!is_array($this->options=$buf['options'])) throw new Exception('Options should be an array'); } catch (Exception $e) { $this->symbols=array(); throw new Exception($this->path.': Cannot load map - '.$e->getMessage()); } } public function path() { self::validate($this->mnt); return $this->path; } public function base_dir() { self::validate($this->mnt); return $this->base_dir; } public function mnt() { self::validate($this->mnt); return $this->mnt; } public function flags() { self::validate($this->mnt); return $this->flags; } public function symbols() { self::validate($this->mnt); $this->realize(); return $this->symbols; } public function options() { self::validate($this->mnt); $this->realize(); return $this->options; } public function version() { self::validate($this->mnt); $this->realize(); return $this->version; } public function min_version() { self::validate($this->mnt); $this->realize(); return $this->min_version; } public function option($opt) { self::validate($this->mnt); $this->realize(); return (isset($this->options[$opt]) ? $options[$opt] : null); } public function symbol_count() { self::validate($this->mnt); return count($this->symbols()); } private function call_success_handlers($key,$value) { foreach (self::$success_handlers as $callable) $callable($key,$this->mnt,$value); } private function resolve_key($key) { $this->realize(); if (!isset($this->symbols[$key])) return false; $value=$this->symbols[$key]; $fname=self::get_symbol_from_key($value); switch($ftype=self::get_type_from_key($value)) { case self::F_EXTENSION: if (!dl($fname)) return false; $this->call_success_handlers($key,$value); break; case self::F_SCRIPT: $file=$this->base_dir.$fname; { require($file); } $this->call_success_handlers($key,$value); break; case self::F_PACKAGE: $file=$this->base_dir.$fname; error_reporting(($errlevel=error_reporting()) & ~E_NOTICE); $mnt=require($file); error_reporting($errlevel); self::instance($mnt)->resolve_key($key); break; default: throw new Exception('<'.$ftype.'>: Unknown file type in map'); } return true; } public function show($subfile_to_url_function=null) { self::validate($this->mnt); $this->realize(); if ($html=self::is_web()) { $this->html_show($subfile_to_url_function); return; } echo "\n* Global information :\n\n"; echo '	Map version : '.$this->version."\n"; echo '	Min reader version : '.$this->min_version."\n"; echo '	Symbol count : '.$this->symbol_count()."\n"; echo "\n* Options :\n\n"; print_r($this->options); echo "\n* Symbols :\n\n"; $ktype_len=$kname_len=4; $fname_len=10; foreach($this->symbols as $key => $value) { $ktype=self::get_type_string(self::get_type_from_key($key)); $kname=self::get_symbol_from_key($key); $ftype=self::get_type_from_key($value); $fname=self::get_symbol_from_key($value); $ktype_len=max($ktype_len,strlen($ktype)+2); $kname_len=max($kname_len,strlen($kname)+2); $fname_len=max($fname_len,strlen($fname)+2); } echo str_repeat('-',$ktype_len+$kname_len+$fname_len+8)."\n"; echo '|'.str_pad('Type',$ktype_len,' ',STR_PAD_BOTH); echo '|'.str_pad('Name',$kname_len,' ',STR_PAD_BOTH); echo '| T '; echo '|'.str_pad('Defined in',$fname_len,' ',STR_PAD_BOTH); echo "|\n"; echo '|'.str_repeat('-',$ktype_len); echo '|'.str_repeat('-',$kname_len); echo '|---'; echo '|'.str_repeat('-',$fname_len); echo "|\n"; foreach($this->symbols as $key => $value) { $ktype=ucfirst(self::get_type_string(self::get_type_from_key($key))); $kname=self::get_symbol_from_key($key); $ftype=self::get_type_from_key($value); $fname=self::get_symbol_from_key($value); echo '| '.str_pad(ucfirst($ktype),$ktype_len-1,' ',STR_PAD_RIGHT); echo '| '.str_pad($kname,$kname_len-1,' ',STR_PAD_RIGHT); echo '| '.$ftype.' '; echo '| '.str_pad($fname,$fname_len-1,' ',STR_PAD_RIGHT); echo "|\n"; } } private function html_show($subfile_to_url_function=null) { echo "<h2>Global information</h2>"; echo '<table border=0>'; echo '<tr><td>Map version:&nbsp;</td><td>' .htmlspecialchars($this->version).'</td></tr>'; echo '<tr><td>Min reader version:&nbsp;</td><td>' .htmlspecialchars($this->min_version).'</td></tr>'; echo '<tr><td>Symbol count:&nbsp;</td><td>' .$this->symbol_count().'</td></tr>'; echo '</table>'; echo "<h2>Options</h2>"; echo '<pre>'.htmlspecialchars(print_r($this->options,true)).'</pre>'; echo "<h2>Symbols</h2>"; echo '<table border=1 bordercolor="#BBBBBB" cellpadding=3 ' .'cellspacing=0 style="border-collapse: collapse"><tr><th>Type</th>' .'<th>Name</th><th>FT</th><th>Defined in</th></tr>'; foreach($this->symbols as $key => $value) { $ktype=ucfirst(self::get_type_string(self::get_type_from_key($key))); $kname=self::get_symbol_from_key($key); $ftype=self::get_type_from_key($value); $fname=self::get_symbol_from_key($value); echo '<tr><td>'.$ktype.'</td><td>'.htmlspecialchars($kname) .'</td><td align=center>'.$ftype.'</td><td>'; if (!is_null($subfile_to_url_function)) echo '<a href="'.call_user_func($subfile_to_url_function,$fname).'">'; echo htmlspecialchars($fname); if (!is_null($subfile_to_url_function)) echo '</a>'; echo '</td></tr>'; } echo '</table>'; } public function export($path=null) { self::validate($this->mnt); $this->realize(); $file=(is_null($path) ? "STDOUT" : $path); $fp=fopen($file,'w'); if (!$fp) throw new Exception("$file: Cannot open for writing"); foreach($this->symbols as $key => $value) fwrite($fp,"$key $value\n"); fclose($fp); } } if (!defined('_AUTOMAP_DISABLE_REGISTER')) { if (!extension_loaded('spl')) throw new Exception("Automap requires the SPL extension"); spl_autoload_register('Automap::autoload_hook'); } Automap::init(); } if (!class_exists('PHK_Util',false)) { class PHK_Util { private static $verbose=true; public static function msg($msg) { if (self::$verbose) echo $msg."\n"; } public static function var_type($var) { return is_object($var) ? 'object '.get_class($var) : gettype($var); } public static function is_web() { return (php_sapi_name()!='cli'); } public static function is_windows() { return (substr(PHP_OS, 0, 3) == 'WIN'); } public static function file_suffix($filename) { $dotpos=strrpos($filename,'.'); if ($dotpos===false) return ''; return strtolower(substr($filename,$dotpos+1)); } public static function combine_path($dir,$rpath) { if ($dir=='.' || $dir=='') return $rpath; $rpath=trim($rpath,'/'); $rpath=trim($rpath,'\\'); $separ=(strpos($dir,':')!==false) ? '/' : DIRECTORY_SEPARATOR; if (($dir==='/') || ($dir==='\\')) $separ=''; else { $c=substr($dir,-1,1); if (($c==='/') || ($c=='\\')) $dir=rtrim($dir,$c); } return $dir.$separ.$rpath; } public static function load_extension($ext) { if (extension_loaded($ext)) return; if (PHP_OS == 'AIX') $suffix = 'a'; else $suffix = PHP_SHLIB_SUFFIX; @dl('php_'.$ext.'.'.$suffix) || @dl($ext.'.'.$suffix); if (!extension_loaded($ext)) throw new Exception("$ext: Cannot load extension"); } public static function load_extensions($ext_list) { $failed_ext=array(); foreach($ext_list as $ext) { try { self::load_extension($ext); } catch (Exception $e) { $failed_ext[]=$ext; } } if (count($failed_ext)) throw new Exception('Cannot load the following required extension(s): ' .implode(' ',$failed_ext)); } public static function substr($buf,$position,$len=NULL) { $str=is_null($len) ? substr($buf,$position) : substr($buf,$position,$len); if ($str===false) $str=''; return $str; } private static $mqr_exists=null; private static $mqr_level=0; private static $mqr_save; public static function disable_mqr() { if (is_null(self::$mqr_exists)) self::$mqr_exists=function_exists('set_magic_quotes_runtime'); if (!self::$mqr_exists) return; if (self::$mqr_level==0) { self::$mqr_save=get_magic_quotes_runtime(); set_magic_quotes_runtime(0); } self::$mqr_level++; } public static function restore_mqr() { if (is_null(self::$mqr_exists)) self::$mqr_exists=function_exists('set_magic_quotes_runtime'); if (!self::$mqr_exists) return; self::$mqr_level--; if (self::$mqr_level==0) set_magic_quotes_runtime(self::$mqr_save); } public static function timestring($time=null) { if ($time=='unlimited') return $time; if (is_null($time)) $time=time(); return @strftime('%d-%b-%Y %H:%M %z',$time); } public static function http_base_url() { if (!self::is_web()) return ''; if (!isset($_SERVER['PATH_INFO'])) return $_SERVER['PHP_SELF']; $phpself=$_SERVER['PHP_SELF']; $slen=strlen($phpself); $pathinfo=$_SERVER['PATH_INFO']; $ilen=strlen($pathinfo); if (($slen > $ilen) && (substr($phpself,$slen-$ilen)==$pathinfo)) $phpself=substr($phpself,0,$slen-$ilen); return $phpself; } public static function http_301_redirect($path) { header('Location: http://'.$_SERVER['HTTP_HOST'].self::http_base_url().$path); header('HTTP/1.1 301 Moved Permanently'); exit(0); } public static function http_404_fail() { header("HTTP/1.0 404 Not Found"); exit(1); } public static function http_403_fail() { header("HTTP/1.0 403 Forbidden"); exit(1); } public static function bool2str($cond) { return $cond ? 'Yes' : 'No'; } public static function readfile($path) { if (($data=@file_get_contents($path))===false) throw new Exception($path.': Cannot get file content'); return $data; } public static function scandir($path) { if (($subnames=scandir($path))===false) throw new Exception($path.': Cannot read directory'); $a=array(); foreach($subnames as $f) if (($f!='.') && ($f!='..')) $a[]=$f; return $a; } public static function trace($msg) { if (($tfile=getenv('PHK_TRACE_FILE')) !== false) { if (($fp=fopen($tfile,'a'))===false) throw new Exception($tfile.': Cannot open trace file'); fwrite($fp,self::timestring().': '.$msg."\n"); fclose($fp); } } public static function delta_ms($start) { $delta=microtime(true)-$start; return round($delta*1000,2).' ms'; } public static function mk_array($data) { if (is_null($data)) return array(); if (!is_array($data)) $data=array($data); return $data; } public static function display_slow_path() { if (getenv('PHK_DEBUG_SLOW_PATH')!==false) { $html=PHK_Util::is_web(); if (isset($GLOBALS['__PHK_SLOW_PATH'])) $data="Slow path entered at:\n".$GLOBALS['__PHK_SLOW_PATH']; else $data="Fast path OK\n"; PHK::info_section($html,'Fast path result'); if ($html) echo "<pre>"; echo $data; if ($html) echo "/<pre>"; } } public static function slow_path() { if ((getenv('PHK_DEBUG_SLOW_PATH')!==false) && (!isset($GLOBALS['__PHK_SLOW_PATH']))) { $e=new Exception(); $GLOBALS['__PHK_SLOW_PATH']=$e->getTraceAsString(); } } public static function format_error($msg) { throw new Exception('Format error: '.$msg); } public static function get_min_version($mnt,$caching) { return PHK_Stream::get_file(false,PHK_Mgr::command_uri($mnt ,'magic_field&name=mv'),$mnt,'magic_field',array('name' => 'mv'),'' ,$caching); } public static function get_options($mnt,$caching) { return unserialize(PHK_Stream::get_file(false,PHK_Mgr::section_uri($mnt ,'OPTIONS'),$mnt,'section',array('name' => 'OPTIONS'),'',$caching)); } public static function get_build_info($mnt,$caching) { return unserialize(PHK_Stream::get_file(false,PHK_Mgr::section_uri($mnt ,'BUILD_INFO'),$mnt,'section',array('name' => 'BUILD_INFO'),'',$caching)); } public static function call_method($object,$method,$args) { return call_user_func_array(array($object,$method),$args); } public static function run_webinfo($phk) { $phk->proxy()->crc_check(); $phkw=new PHK_Webinfo($phk); $phkw->run(); } public static function atomic_write($path,$data) { $tmpf=tempnam(dirname($path),'tmp_'); if (file_put_contents($tmpf,$data)!=strlen($data)) throw new Exception($tmpf.": Cannot write"); if (PHK_Util::is_windows()) @unlink($path); if (!rename($tmpf,$path)) { unlink($tmpf); throw new Exception($path,'Cannot replace file'); } } private static $simul_inode_array=array(); private static $simul_inode_index=1; public static function path_unique_id($prefix,$path,&$mtime) { if (($s=stat($path))===false) throw new Exception("$path: File not found"); $dev=$s[0]; $inode=$s[1]; $mtime=$s[9]; if ($inode==0) { $rpath=realpath($path); if ($rpath === false) throw new Exception("$path: Cannot compute realpath"); if (isset(self::$simul_inode_array[$rpath])) $inode=self::$simul_inode_array[$rpath]; else { $inode=self::$simul_inode_index++; self::$simul_inode_array[$rpath]=$inode; } } return sprintf('%s_%X_%X_%X',$prefix,$dev,$inode,$mtime); } } } if (!class_exists('PHK_File',false)) { class PHK_File { private $fp=null; private $path; private $size; private $open_count=0; private $keep_open_flag; public function __construct($path,$flags) { $this->set_params($path,$flags); if (($this->size=filesize($path))===false) throw new Exception($path.': Cannot get file size'); } public function set_params($path,$flags) { $this->path=$path; $this->keep_open_flag=PHK_Mgr::is_a_phk_uri($path); } public function __sleep() { return array('size'); } public function __destruct() { $this->really_close(); } private function really_close() { if (!is_null($this->fp)) { fclose($this->fp); $this->fp=null; $this->open_count=0; } } public function _open() { if (is_null($this->fp)) { if (!($this->fp=fopen($this->path,'rb',false))) throw new Exception($this->path.': Cannot open for reading'); $this->open_count=1; } else $this->open_count++; } public function _close() { $this->open_count--; if (($this->open_count <= 0) && (!$this->keep_open_flag)) $this->really_close(); } private function read($size) { $data=''; $nb_chunks=intval($size/8192); $rest=$size % 8192; PHK_Util::disable_mqr(); while ($nb_chunks > 0) { $data .= $this->read_chunk(8192); $nb_chunks--; } if ($rest) $data .= $this->read_chunk($rest); PHK_Util::restore_mqr(); return $data; } private function read_chunk($size) { $buf=fread($this->fp,$size); if ($buf===false) throw new Exception('Cannot read'); if (($bsize=strlen($buf))!=$size) throw new Exception("Short read ($bsize/$size)"); return $buf; } public function _read_block($offset,$size) { try { $this->_open(); if (fseek($this->fp,$offset,SEEK_SET) == -1) throw new Exception('Cannot seek'); $buf=$this->read($size); $this->_close(); } catch (Exception $e) { $this->_close(); throw new Exception($e->getMessage()); } return $buf; } public function size() { return $this->size; } public function path() { return $this->path; } } } if (!class_exists('PHK_FileSpace',false)) { class PHK_FileSpace { public $file; private $offset; private $size; public function __construct($arg1,$arg2,$size=null) { if (is_string($arg1)) { $this->file=new PHK_File($arg1,$arg2); $this->offset=0; $this->size=$this->file->size(); } else { if ((!($arg1 instanceof self)) || (!is_numeric($arg2)) || (!is_numeric($size)) || ($arg2 < 0) || (($arg2+$size) > $arg1->size)) throw new Exception("PHK_FileSpace: cannot create - invalid arguments"); $this->file=$arg1->file; $this->offset=$arg1->offset + $arg2; $this->size=$size; } } public function read_block($offset=0,$size=null) { if (is_null($size)) $size=$this->size-$offset; if (($offset<0)||($size<0)||($offset+$size>$this->size)) throw new Exception('PHK_FileSpace: Read out of bound'); if ($size==0) return ''; $data=$this->file->_read_block($this->offset+$offset,$size); return $data; } public function open() { $this->file->_open(); } public function close() { $this->file->_close(); } public function size() { return $this->size; } public function path() { return $this->file->path(); } } } if (!class_exists('PHK_Cache',false)) { class PHK_Cache { const VERSION='1.1.0'; const TTL=3600; private static $caches=array("apc","xcache","eaccelerator"); private static $cache_name; private static $cache=null; private static $cache_maxsize=524288; public static function cache_id($prefix,$key) { return 'phk.'.$prefix.'.'.$key; } private static function set_cache_object() { if (is_null(self::$cache)) { self::$cache=false; self::$cache_name='none'; foreach(self::$caches as $c) { if (!extension_loaded($c)) continue; $class='PHK_Cache_'.$c; $obj=new $class; try { $status=$obj->init(); } catch (Exception $e) { $status=false; } if ($status) { self::$cache=$obj; self::$cache_name=$c; break; } unset($obj); } } } public static function set_cache_maxsize($size) { $this->cache_maxsize=$size; } public static function cache_name() { if (is_null(self::$cache)) self::set_cache_object(); return self::$cache_name; } public static function cache_present() { if (is_null(self::$cache)) self::set_cache_object(); return (self::$cache!==false); } public static function get($id) { if (is_null(self::$cache)) self::set_cache_object(); if (self::$cache===false) return null; $result=self::$cache->get($id); if ($result===false) $result=null; return $result; } public static function set($id,$data) { if (is_null(self::$cache)) self::set_cache_object(); if (is_object(self::$cache)) { if (is_string($data) && (strlen($data) > self::$cache_maxsize)) return; PHK_Util::trace("Writing cache: id=$id"); self::$cache->set($id,$data); } } } abstract class PHK_Cache_Base { abstract public function init(); abstract public function get($id); abstract public function set($id,$data); } class PHK_Cache_apc extends PHK_Cache_Base { public function init() { return PHK_Util::is_web() || ini_get('apc.enable_cli'); } public function get($id) { return apc_fetch($id); } public function set($id,$data) { apc_store($id,$data,PHK_Cache::TTL); } } class PHK_Cache_xcache extends PHK_Cache_Base { public function init() { return PHK_Util::is_web(); } public function get($id) { return xcache_get($id); } public function set($id,$data) { xcache_set($id,$data,PHK_Cache::TTL); } } class PHK_Cache_eaccelerator extends PHK_Cache_Base { public function init() { if (!function_exists('eaccelerator_get')) return false; return PHK_Util::is_web(); } public function get($id) { return eaccelerator_get($id); } public function set($id,$data) { eaccelerator_put($id,$data,PHK_Cache::TTL); } } } if (!class_exists('PHK_Proxy',false)) { class PHK_Proxy { const VERSION='1.3.0'; const INTERP_LEN=64; const VERSION_SIZE=12; const OFFSET_SIZE=11; const MAGIC_STRING="#PHK M\024\x8\6\3"; const MAGIC_STRING_LEN=10; const MAGIC_STRING_OFFSET=70; const MAGIC_LINE_LEN=177; const AUTOMAP_SECTION='AUTOMAP'; const CRC_OFFSET=200; protected $stree=null; public $ftree=null; protected $flags; protected $fspace; private $magic=null; public function __construct($path,$flags) { try { PHK_Util::slow_path(); $this->flags=$flags; if (!($this->flags & PHK::F_CREATOR)) { if (! self::file_is_package($path)) throw new Exception($path.'is not a PHK package'); $this->fspace= new PHK_FileSpace($path,$flags); $this->fspace->open(); $this->get_magic_values(); if ($this->fspace->size()!=$this->magic['fs']) PHK_Util::format_error('Invalid file size. Should be '.$this->magic['fs']); $this->stree=PHK_Tree::create_from_edata( $this->fspace->read_block($this->magic['sso'] ,$this->magic['sto']-$this->magic['sso']) ,new PHK_FileSpace($this->fspace,$this->magic['sto'] ,$this->magic['fto']-$this->magic['sto'])); $this->ftree=PHK_Tree::create_from_edata($this->section('FTREE') ,new PHK_FileSpace($this->fspace,$this->magic['fto'] ,$this->magic['sio']-$this->magic['fto'])); $this->fspace->close(); } else { $this->ftree=PHK_Tree::create_empty(); $this->stree=PHK_Tree::create_empty(); } } catch (Exception $e) { throw new Exception('While initializing PHK proxy - '.$e->getMessage()); } } public function crc_check() { self::check_crc_buffer($this->fspace->read_block()); } public static function insert_crc($buffer,$crc) { return substr_replace($buffer,$crc,self::CRC_OFFSET,8); } private static function get_crc($buffer) { return substr($buffer,self::CRC_OFFSET,8); } private static function compute_crc($buffer) { return sprintf('%08x',crc32(self::insert_crc($buffer,'00000000'))); } public static function check_crc_buffer($buffer) { if (self::compute_crc($buffer) !== self::get_crc($buffer)) throw new Exception('Wrong CRC'); } public static function fix_crc($buffer) { return self::insert_crc($buffer,self::compute_crc($buffer)); } public static function file_is_package($path) { if (filesize($path)< (self::INTERP_LEN+self::MAGIC_LINE_LEN)) return false; if (($fp=fopen($path,'rb',false))===false) return false; if (fseek($fp,self::MAGIC_STRING_OFFSET) != 0) return false; if (($m=fread($fp,self::MAGIC_STRING_LEN))===false) return false; fclose($fp); return ($m===self::MAGIC_STRING); } public static function data_is_package($data) { if (strlen($data) < (self::INTERP_LEN+self::MAGIC_LINE_LEN)) return false; return (substr($data,self::MAGIC_STRING_OFFSET,self::MAGIC_STRING_LEN) ===self::MAGIC_STRING); } public function get_magic_values() { $buf=$this->fspace->read_block(self::INTERP_LEN,self::MAGIC_LINE_LEN); $fsize=(int)substr($buf,47,self::OFFSET_SIZE); $sio=(int)substr($buf,121,self::OFFSET_SIZE); $crc=null; sscanf(substr($buf,136,8),'%08x',$crc); $this->magic=array( 'mv' => trim(substr($buf,18,self::VERSION_SIZE)), 'v' => trim(substr($buf,32,self::VERSION_SIZE)), 'fs' => $fsize, 'po' => (int)substr($buf,61,self::OFFSET_SIZE), 'sso' => (int)substr($buf,76,self::OFFSET_SIZE), 'sto' => (int)substr($buf,91,self::OFFSET_SIZE), 'fto' => (int)substr($buf,106,self::OFFSET_SIZE), 'sio' => $sio, 'pco' => (int)substr($buf,148,self::OFFSET_SIZE), 'pcs' => (int)substr($buf,163,self::OFFSET_SIZE), 'crc' => $crc, 'signed' => ($sio != $fsize)); } public function magic_field($name) { return $this->magic[$name]; } private function cache_data() { $this->stree->walk('read'); $this->ftree->walk('read'); } private function clear_cache() { $this->stree->walk('clear_cache'); $this->ftree->walk('clear_cache'); } public function path_list() { return $this->ftree->path_list(); } public function section_list() { return $this->stree->path_list(); } public function signed() { return $this->magic['signed']; } public function interp() { $block=$this->fspace->read_block(0,self::INTERP_LEN); if ((($block{0}!='#')||($block{1}!='!')) && (($block{0}!='<')||($block{1}!='?'))) throw new Exception('Invalid interpreter block'); return ($block{0}=='#') ? trim(substr($block,2)) : ''; } public static function interp_block($interp) { if (($interp!=='') && (strlen($interp) > (PHK_Proxy::INTERP_LEN-3))) throw new Exception('Length of interpreter string is limited to ' .(PHK_Proxy::INTERP_LEN-3).' bytes'); if ($interp==='') return str_pad('<?'.'php',PHK_Proxy::INTERP_LEN-2).'?'.'>'; else return '#!'.str_pad($interp,PHK_Proxy::INTERP_LEN-3)."\n"; } public static function set_buffer_interp($path,$interp='') { return self::fix_crc(substr_replace(PHK_Util::readfile($path) ,self::interp_block($interp),0,PHK_Proxy::INTERP_LEN)); } public function version() { return $this->magic['v']; } public function path() { return $this->fspace->path(); } public function section($name) { try { $node=$this->stree->lookup_file($name); } catch (Exception $e) { throw new Exception($name.': Unknown section'); } try { return $node->read(); } catch (Exception $e) { throw new Exception($name.': Cannot read section - '.$e->getMessage()); } } public function ftree() { return $this->ftree; } public function stree() { return $this->stree; } public function flags() { return $this->flags; } public function display_packages() { $this->ftree->display_packages(); } public function showfiles() { $this->ftree->display(true); } } } if (!class_exists('PHK_Mgr',false)) { class PHK_Mgr { const VERSION='1.4.0'; private static $phk_tab=array(); private static $proxy_tab=array(); private static $tmp_mnt_num=0; private static $caching=null; public static function is_mounted($mnt) { return isset(self::$phk_tab[$mnt]); } public static function validate($mnt) { if (!self::is_mounted($mnt)) throw new Exception($mnt.': Invalid mount point'); return $mnt; } public static function instance($mnt) { self::validate($mnt); return self::$phk_tab[$mnt]; } public static function proxy($mnt) { self::validate($mnt); if (is_null(self::$proxy_tab[$mnt])) { $phk=self::instance($mnt); self::$proxy_tab[$mnt]=new PHK_Proxy($phk->path(),$phk->flags()); } return self::$proxy_tab[$mnt]; } public static function mnt_list() { return array_keys(self::$phk_tab); } public static function set_cache($caching) { self::$caching=$caching; } public static function cache_enabled($mnt,$command,$params,$path) { if (!is_null(self::$caching)) return self::$caching; if (is_null($mnt)) return false; return self::instance($mnt)->cache_enabled($command,$params,$path); } public static function path_to_mnt($path) { $dummy1=$mnt=$dummy2=null; self::compute_mnt($path,$dummy1,$mnt,$dummy2); if (self::is_mounted($mnt)) return $mnt; throw new Exception($path.': path is not mounted'); } public static function mount($path,$flags=0) { try { if ($flags & PHK::F_CREATOR) { $mnt='_tmp_mnt_'.(self::$tmp_mnt_num++); self::$proxy_tab[$mnt]=null; self::$phk_tab[$mnt]=new PHK_Creator($mnt,$path,$flags); } else { $parent_mnt=$mnt=$mtime=$options=$build_info=null; self::compute_mnt($path,$parent_mnt,$mnt,$mtime); if (self::is_mounted($mnt)) return $mnt; self::$proxy_tab[$mnt]=null; self::$phk_tab[$mnt]=$phk=new PHK($parent_mnt,$mnt,$path,$flags,$mtime); self::get_store_data($mnt,$options,$build_info); $phk->init($options,$build_info); } } catch (Exception $e) { if (isset($mnt) && self::is_mounted($mnt)) unset(self::$phk_tab[$mnt]); throw new Exception($path.': Cannot mount - '.$e->getMessage()); } return $mnt; } private static function get_store_data($mnt,&$options,&$build_info) { $caching=(is_null(self::$caching) ? true : self::$caching); $mv=PHK_Util::get_min_version($mnt,$caching); if (version_compare($mv,PHK::VERSION) > 0) { PHK_Util::format_error('Cannot understand this version. ' .'Requires at least PHK version '.$mv); } $options=PHK_Util::get_options($mnt,$caching); $build_info=PHK_Util::get_build_info($mnt,$caching); } private static function compute_mnt($path,&$parent_mnt,&$mnt,&$mtime) { if (self::is_a_phk_uri($path)) { $dummy1=$dummy2=$subpath=$parent_mnt=null; PHK_Stream::parse_uri($path,$dummy1,$dummy2,$parent_mnt,$subpath); self::validate($parent_mnt); $mnt=$parent_mnt.'#'.str_replace('/','*',$subpath); $mtime=self::instance($parent_mnt)->mtime(); } else { $mnt=PHK_Util::path_unique_id('p',$path,$mtime); $parent_mnt=null; } } public static function umount($mnt) { if (self::is_mounted($mnt)) { foreach (array_keys(self::$phk_tab) as $dmnt) { if (isset(self::$phk_tab[$dmnt]) && self::$phk_tab[$dmnt]->parent_mnt()===$mnt) self::umount($dmnt); } self::$phk_tab[$mnt]->umount(); unset(self::$phk_tab[$mnt]); unset(self::$proxy_tab[$mnt]); } } public static function uri($mnt,$path) { return self::base_uri($mnt).ltrim($path,'/'); } public static function is_a_phk_uri($uri) { $u=$uri.'      '; return ($u{0}=='p' && $u{1}=='h' && $u{2}=='k' && $u{3}==':' && $u{4}=='/' && $u{5}=='/'); } public static function base_uri($mnt) { return 'phk://'.$mnt.'/'; } public static function command_uri($mnt,$command) { return self::uri($mnt,'?'.$command); } public static function section_uri($mnt,$section) { return self::command_uri($mnt,'section&name='.$section); } public static function automap_uri($mnt) { if ((!self::is_mounted($mnt))||(!self::instance($mnt)->map_defined())) return null; return self::section_uri($mnt,'AUTOMAP'); } public static function normalize_uri($uri) { return str_replace('\\','/',$uri); } public static function uri_to_mnt($uri) { if (! self::is_a_phk_uri($uri)) throw new Exception($uri.': Not a PHK URI'); $buf=substr(self::normalize_uri($uri),6); $buf=substr($buf,0,strcspn($buf,'/')); return trim($buf); } public static function php_version_check() { if (version_compare(PHP_VERSION,'5.1.0') < 0) { echo PHP_VERSION.': Unsupported PHP version ' .'- PHK needs at least version 5.1.0'; exit(1); } } } } if (!class_exists('PHK_Base',false)) { abstract class PHK_Base { const VERSION='1.4.0'; const F_CRC_CHECK=4; const F_NO_MOUNT_SCRIPT=8; const F_CREATOR=16; protected $mnt; protected $parent_mnt; protected $options=null; protected $build_info=null; protected $flags; protected $path; protected $plugin=null; protected $caching=null; protected $mtime; protected $backend=null; protected static $mime_table=array( '' => 'text/plain', 'gif' => 'image/gif', 'jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg', 'png' => 'image/png', 'psd' => 'image/psd', 'bmp' => 'image/bmp', 'tif' => 'image/tiff', 'tiff' => 'image/tiff', 'iff' => 'image/iff', 'wbmp' => 'image/vnd.wap.wbmp', 'ico' => 'image/x-icon', 'xbm' => 'image/xbm', 'txt' => 'text/plain', 'htm' => 'text/html', 'html' => 'text/html', 'css' => 'text/css', 'php' => 'application/x-httpd-php', 'phk' => 'application/x-httpd-php', 'pdf' => 'application/pdf', 'js' => 'application/x-javascript', 'swf' => 'application/x-shockwave-flash', 'xml' => 'application/xml', 'xsl' => 'application/xml', 'xslt' => 'application/xslt+xml', 'mp3' => 'audio/mpeg', 'ram' => 'audio/x-pn-realaudio', 'svg' => 'image/svg+xml' ); public function __construct($parent_mnt,$mnt,$path,$flags,$mtime) { $this->parent_mnt=$parent_mnt; $this->mnt=$mnt; $this->path=$path; $this->flags=$flags; $this->mtime=$mtime; } public function init($options,$build_info) { try { $this->options=$options; $this->build_info=$build_info; $this->supports_php_version(); if ($this->option('crc_check') || ($this->flags & self::F_CRC_CHECK)) $this->crc_check(); if (is_null($this->parent_mnt)) { if (!is_null($extensions=$this->option('required_extensions'))) PHK_Util::load_extensions($extensions); } if ($this->map_defined()) { Automap::mount($this->automap_uri(),$this->base_uri(),$this->mnt); } if (!($this->flags & PHK::F_NO_MOUNT_SCRIPT) && (!is_null($mpath=$this->option('mount_script')))) { require $this->uri($mpath); } if (!is_null($c=$this->option('plugin_class'))) $this->plugin=new $c($this->mnt); } catch (Exception $e) { throw new Exception('While initializing PHK instance - '.$e->getMessage()); } } public function map_defined() { if ($this->flags & PHK::F_CREATOR) return false; return $this->build_info('map_defined'); } public function mtime() { return $this->mtime; } public function set_cache($toggle) { $this->caching=$toggle; } public static function file_is_package($path) { return PHK_Proxy::file_is_package($path); } public static function data_is_package($data) { return PHK_Proxy::data_is_package($data); } public function cache_enabled($command,$params,$path) { if ($this->flags & PHK::F_CREATOR) return false; if ($this->option('no_cache')===true) return false; if (!PHK_Cache::cache_present()) return false; if (!is_null($this->caching)) return $this->caching; return true; } public function umount() { if (!is_null($this->plugin)) unset($this->plugin); if (!($this->flags & PHK::F_NO_MOUNT_SCRIPT)) { if (!is_null($upath=$this->option('umount_script'))) { require($this->uri($upath)); } } if ($this->map_defined()) Automap::umount($this->mnt); } public function mnt() { return $this->mnt; } public function flags() { return $this->flags; } public function path() { return $this->path; } public function uri($path) { return PHK_Mgr::uri($this->mnt,$path); } public function section_uri($section) { return PHK_Mgr::section_uri($this->mnt,$section); } public function command_uri($command) { return PHK_Mgr::command_uri($this->mnt,$command); } public function base_uri() { return PHK_Mgr::base_uri($this->mnt); } public function automap_uri() { return PHK_Mgr::automap_uri($this->mnt); } public function option($key) { return (isset($this->options[$key]) ? $this->options[$key] : null); } public function options() { return $this->options; } public function parent_mnt() { return $this->parent_mnt; } public function web_access_allowed($path) { $plen=strlen($path); foreach(PHK_Util::mk_array($this->option('web_access')) as $apath) { if ($apath=='/') return true; $alen=strlen($apath); if (($plen >= $alen) && (substr($path,0,$alen)==$apath) && (($alen==$plen)||($path{$alen}=='/'))) return true; } return false; } private function goto_main($web_run_script) { if ($this->option('web_main_redirect')) { PHK_Util::http_301_redirect($web_run_script); } else return 'require(\''.$this->uri($web_run_script).'\');'; } public function web_tunnel($path=null,$webinfo=false) { if (is_null($path)) $path=PHK::get_subpath(); $last_slash=(substr($path,-1)=='/'); if ($path!='/') $path=rtrim($path,'/'); $web_run_script=$this->option('web_run_script'); $mnt=$this->mnt(); if ($path=='') { if (!is_null($web_run_script)) return $this->goto_main($web_run_script); else PHK_Util::http_301_redirect('/'); } if ((!$webinfo) && (!$this->web_access_allowed($path)) && ($path!==$web_run_script)) { if (!is_null($web_run_script)) return $this->goto_main($web_run_script); else PHK_Util::http_403_fail(); } $uri=$this->uri($path); if (($a=@stat($uri))===false) PHK_Util::http_404_fail(); if (($a['mode'] & 0170000) == 040000) { $file_path=null; if ($last_slash) { foreach(array('index.htm', 'index.html', 'index.php') as $fname) { if (is_file($this->uri($path.'/'.$fname))) { $file_path=$path.'/'.$fname; break; } } if (is_null($file_path)) PHK_Util::http_404_fail(); } else PHK_Util::http_301_redirect($path.'/'); } else $file_path=$path; if ((!$webinfo) && ($this->is_php_source_path($file_path))) { return "require('".$this->uri($file_path)."');"; } else { return "PHK_Mgr::instance('".$this->mnt."')->mime_header('$file_path');\n" ."readfile('".$this->uri($file_path)."');"; } } public function mime_header($path) { if (!is_null($type=$this->mime_type($path))) header('Content-type: '.$type); } public function mime_type($path) { $ext=PHK_Util::file_suffix($path); if ((!is_null($mtab=$this->option('mime_types'))) && isset($mtab[$ext])) return $mtab[$ext]; if (isset(self::$mime_table[$ext])) return self::$mime_table[$ext]; if (strpos($ext,'php')!==false) return 'application/x-httpd-php'; return null; } public function is_php_source_path($path) { return ($this->mime_type($path)==='application/x-httpd-php'); } public function proxy() { return PHK_Mgr::proxy($this->mnt); } public function crc_check() { $this->proxy()->crc_check(); } public function supports_php_version() { if ((!is_null($minv=$this->option('min_php_version'))) && (version_compare(PHP_VERSION,$minv) < 0)) throw new Exception("PHP minimum supported version: $minv (current is ".PHP_VERSION.")"); if ((!is_null($maxv=$this->option('max_php_version'))) && (version_compare(PHP_VERSION,$maxv) > 0)) throw new Exception("PHP maximum supported version: $maxv (current is ".PHP_VERSION.")"); } public function plugin() { return $this->plugin; } public static function accelerator_is_present() { return false; } public function build_info($name=null) { if (is_null($name)) return $this->build_info; if (!isset($this->build_info[$name])) throw new Exception($name.': unknown build info'); return $this->build_info[$name]; } public static function subpath_url($path) { return PHK_Backend::subpath_url($path); } public static function get_subpath() { $path=''; if (isset($_REQUEST['_PHK_path'])) $path=urldecode($_REQUEST['_PHK_path']); else { $path=isset($_SERVER['PATH_INFO']) ? $_SERVER['PATH_INFO'] : ''; if ($path=='' && isset($_SERVER['ORIG_PATH_INFO'])) $path=$_SERVER['ORIG_PATH_INFO']; } if (($path!='') && ($path{0}!='/')) $path='/'.$path; return $path; } private function backend() { if (is_null($this->backend)) $this->backend=new PHK_Backend($this); return $this->backend; } public function __call($method,$args) { return PHK_Util::call_method($this->backend($this),$method,$args); } public static function prolog($file,&$cmd,&$ret) { if ($cli=(!PHK_Util::is_web())) { ini_set('display_errors',true); ini_set('memory_limit','1024M'); } PHK_Mgr::php_version_check(); try { $mnt=PHK_Mgr::mount($file); $phk=PHK_Mgr::instance($mnt); } catch (Exception $e) { if (getenv('PHK_DEBUG')!==false) throw $e; echo '** Fatal error: Cannot mount PHK file - '.$e->getMessage()."\n"; exit(1); } $tmp=get_included_files(); $main=(($tmp[0]===$file) || (realpath($tmp[0]) === $file)); if (!$main) { if (!is_null($script=$phk->option('lib_run_script'))) { require($phk->uri($script)); } if ($phk->option('auto_umount')) { PHK_Mgr::umount($mnt); $ret=''; } else $ret=$mnt; return; } if ($cli) { if (($_SERVER['argc']>1) && ($_SERVER['argv'][1]!='') && ($_SERVER['argv'][1]{0}=='@')) { $ret=$phk->builtin_prolog($file); return; } if (!is_null($run_path=$phk->option('cli_run_script'))) { $cmd="require('".$phk->uri($run_path)."');"; } return; } else { if (file_exists($file.'.webinfo')) { PHK_Util::run_webinfo($phk); } else { $cmd=$phk->web_tunnel(); } } } } } if (!class_exists('PHK',false)) { class PHK extends PHK_Base { public static function need_php_runtime() { } } } if (!class_exists('PHK_Backend',false)) { class PHK_Backend { private $front; public function __construct($front) { $this->front=$front; } private function __get($name) { return $this->front->$name(); } private function __call($method,$args) { return call_user_func_array(array($this->front,$method),$args); } public function test() { error_reporting(($errlevel=error_reporting()) & ~E_NOTICE); if (!is_null($test_script=$this->option('test_script'))) { $test_uri=$this->uri($test_script); require($test_uri); } elseif (!is_null($phpunit_test_package=$this->option('phpunit_test_package'))) { if (!is_null($phpunit_package=$this->option('phpunit_package'))) { $phpunit_package_mnt=require $this->uri($phpunit_package); } else $phpunit_package_mnt=null; $phpunit_test_package_mnt=require $this->uri($phpunit_test_package); _phk_load_phpunit_interface(); define('PHPUnit_MAIN_METHOD', 'PHPUnit_TextUI_PHK::main'); PHPUnit_TextUI_PHK::main(); if (!is_null($phpunit_package_mnt)) PHK_Mgr::umount($phpunit_package_mnt); if (!is_null($phpunit_test_package_mnt)) PHK_Mgr::umount($phpunit_test_package_mnt); } else echo "No unit tests\n"; error_reporting($errlevel); } public function envinfo() { $html=PHK_Util::is_web(); self::info_section($html,'PHK Accelerator'); self::start_info_table($html); if (PHK::accelerator_is_present()) PHK::accel_techinfo(); else self::show_info_line($html,'PHK Accelerator','No'); self::info_section($html,'Automap Accelerator'); self::start_info_table($html); if (Automap::accelerator_is_present()) Automap::accel_techinfo(); else self::show_info_line($html,'Automap Accelerator','No'); self::info_section($html,'Cache'); self::show_info_line($html,'Cache system used',PHK_Cache::cache_name()); self::end_info_table($html); self::info_section($html,'Environment'); self::start_info_table($html); self::show_info_line($html,'PHP SAPI',php_sapi_name()); self::show_info_line($html,'Mount point',$this->mnt); $string=''; $class=new ReflectionClass('PHK'); foreach($class->getConstants() as $name => $value) { if ((strlen($name)>1) && (substr($name,0,2)=='F_') && ($this->flags & $value)) $string .= ','.strtolower(substr($name,2)); } unset($class); $string=trim($string,','); self::show_info_line($html,'Current mount options' ,$string=='' ? '<none>' : $string); self::end_info_table($html); } public function showfiles() { $this->proxy()->showfiles(); } public function showmap($subfile_to_url_function=null) { if ($this->map_defined()) Automap::instance($this->mnt)->show($subfile_to_url_function); else echo "Automap not defined\n"; } private function plugin_info($html) { self::info_section($html,'Plugin'); if (is_null($class=$this->option('plugin_class'))) { echo ($html ? '<p>' : '')."Not defined\n"; return; } if ($this->is_callable_plugin_method('_webinfo')) { $this->call_plugin_method('_webinfo',$html); echo $html ? '<p>' : "\n"; } self::start_info_table($html); self::show_info_line($html,'Class',$class); $rc=new ReflectionClass($class); foreach ($rc->getMethods() as $method) { if ((!$method->isPublic())||($method->isStatic()) ||($method->isConstructor())||($method->isDestructor()) ||($method->getName()==='_webinfo')) continue; $name=$method->getName(); $a=array(); foreach($method->getParameters() as $param) { $s='$'.$param->getName(); if ($param->isPassedByReference()) $s='&'.$s; if ($param->isArray()) $s = 'Array '.$s; if ($param->isOptional()) { if ($param->isDefaultValueAvailable()) $s .= ' = '.var_export($param->getDefaultValue(),true); $s = '['.$s.']'; } $a[]=$s; } self::show_info_line($html,'Method',$name.' ( '.implode(', ',$a).' )'); } self::end_info_table($html); } private function show_option($html,$opt,$default=null) { $str1=ucfirst(str_replace('_',' ',$opt)); $url=null; $newwin=true; if (is_null($val=$this->option($opt))) $val=$default; if ($html && ereg('^(.*)[ 	]<([^ 	]+)>.*$',$val,$regs)) { $str2=trim($regs[1]); $url=$regs[2]; if ($str2=='') $str2=$url; } else { $str2=$val; $vlen=strlen($val); if (($vlen>=7)&&(substr($val,0,7)=='http://')) $url=$val; elseif (($vlen>=1) && ($val{0}=='/') && file_exists($this->uri($val))) { $url=PHK::subpath_url('/view/'.trim($val,'/')); $newwin=false; } } self::show_info_line($html,$str1,$str2,$url,$newwin); } public static function info_section($html,$title) { echo $html ? '<h2>'.htmlspecialchars($title).'</h2>' : "\n==== ".str_pad($title.' ',70,'='). "\n\n"; } public static function show_info_line($html,$string,$value,$url=null ,$newwin=true) { if (is_null($value)) $value='<>'; if (is_bool($value)) $value=PHK_Util::bool2str($value); if ($html) { echo '<tr><td>'.htmlspecialchars($string).':&nbsp;</td><td>'; if ($url) { echo '<a href="'.$url.'"'; if ($newwin) echo ' target="_blank"'; echo '>'; } echo htmlspecialchars($value); if ($url) echo '</a>'; echo '</td></tr>'; } else { echo "$string: $value"; if ((!is_null($url)) && ($url{0}!='/')) echo " <$url>"; echo "\n"; } } public static function start_info_table($html) { echo $html ? '<table border=0>' : ''; } public static function end_info_table($html) { echo $html ? '</table>' : ''; } public function info() { $html=PHK_Util::is_web(); if ($html && (!is_null($info_script=$this->option('info_script')))) { require($this->uri($info_script)); } else { self::start_info_table($html); $this->show_option($html,'name'); $this->show_option($html,'summary'); $this->show_option($html,'version'); $this->show_option($html,'release'); $this->show_option($html,'distribution'); $this->show_option($html,'license'); $this->show_option($html,'copyright'); $this->show_option($html,'url'); $this->show_option($html,'author'); $this->show_option($html,'packager'); $this->show_option($html,'requires'); $req=implode(' ',PHK_Util::mk_array($this->option('required_extensions'))); if ($req=='') $req='<none>'; self::show_info_line($html,'Required extensions',$req); self::end_info_table($html); } } public function techinfo() { $html=PHK_Util::is_web(); self::info_section($html,'Package'); self::start_info_table($html); $this->show_option($html,'name'); $this->show_option($html,'summary'); $this->show_option($html,'version'); $this->show_option($html,'release'); $this->show_option($html,'distribution'); $this->show_option($html,'license'); $this->show_option($html,'copyright'); $this->show_option($html,'url'); $this->show_option($html,'author'); $this->show_option($html,'packager'); $this->show_option($html,'requires'); self::show_info_line($html,'Signed',$this->proxy()->signed()); self::show_info_line($html,'Automap defined',$this->map_defined()); self::show_info_line($html,'File path',$this->path); self::show_info_line($html,'File size',filesize($this->path)); $req=implode(', ',PHK_Util::mk_array($this->option('required_extensions'))); if ($req=='') $req='<none>'; self::show_info_line($html,'Required extensions',$req); self::show_info_line($html,'Build date' ,PHK_Util::timestring($this->build_info('build_timestamp'))); $this->show_option($html,'icon'); $this->show_option($html,'crc_check',false); $this->show_option($html,'help_prefix'); $this->show_option($html,'license_prefix'); $this->show_option($html,'auto_umount',false); $this->show_option($html,'no_cache',false); $this->show_option($html,'no_opcode_cache',false); $this->show_option($html,'prolog_code_creator',false); $this->show_option($html,'plain_prolog',false); self::show_info_line($html,'File count',count($this->path_list())); self::end_info_table($html); $this->plugin_info($html); self::info_section($html,'Package scripts'); self::start_info_table($html); $this->show_option($html,'cli_run_script'); $this->show_option($html,'web_run_script'); $this->show_option($html,'lib_run_script'); $this->show_option($html,'info_script'); $this->show_option($html,'mount_script'); $this->show_option($html,'umount_script'); $this->show_option($html,'test_script'); $this->show_option($html,'phpunit_package'); $this->show_option($html,'phpunit_test_package'); self::end_info_table($html); self::info_section($html,'Module versions'); self::start_info_table($html); self::show_info_line($html,'PHK_Creator',$this->build_info('PHK_Creator_version')); self::show_info_line($html,'PHK min version',$this->build_info('PHK_min_version')); self::show_info_line($html,'Automap_Creator class',$this->build_info('Automap_creator_version')); self::show_info_line($html,'Automap min version',$this->build_info('Automap_min_version')); self::show_info_line($html,'PHK_PSF class',$this->build_info('PHK_PSF_version')); self::end_info_table($html); self::info_section($html,'Sub-packages'); ob_start(); $this->proxy()->display_packages(); $data=ob_get_clean(); if ($data==='') echo ($html ? '<p>' : '')."None\n"; else echo $data; self::info_section($html,'Web direct access'); self::start_info_table($html); $list=PHK_Util::mk_array($this->option('web_access')); self::show_info_line($html,'State',count($list) ? 'Enabled' : 'Disabled'); $this->show_option($html,'web_main_redirect',false); foreach($list as $path) self::show_info_line($html,'Path',$path); self::end_info_table($html); self::info_section($html,'Package options'); $a=$this->options(); $data=(is_null($a) ? '<>' : print_r($a,true)); echo ($html ? ('<pre>'.htmlspecialchars($data).'</pre>') : $data); self::info_section($html,'Sections'); $this->proxy()->stree()->display(false); } public function auto_file($prefix) { $html=PHK_Util::is_web(); $txt_suffixes=array('.txt',''); $suffixes=($html ? array('.htm','.html') : $txt_suffixes); $base_path=$this->uri($prefix); foreach($suffixes as $suffix) { if (is_readable($base_path.$suffix)) { return PHK_Util::readfile($base_path.$suffix); break; } } if ($html) { foreach ($txt_suffixes as $suffix) if (is_readable($base_path.$suffix)) return '<pre>'.htmlspecialchars(PHK_Util::readfile($base_path.$suffix)) .'</pre>'; } return null; } public function auto_option($name) { $data=null; $prefix=$this->option($name.'_prefix'); if (!is_null($prefix)) $data=$this->auto_file($prefix); if (is_null($data)) { $data='<No '.$name.' file>'."\n"; if (PHK_Util::is_web()) $data=htmlspecialchars($data); } return $data; } public function is_callable_plugin_method($method) { return (is_null($this->plugin)) ? false : is_callable(array($this->plugin,$method)); } public function call_plugin_method($method) { if (!$this->is_callable_plugin_method($method)) throw new Exception($method.': Undefined plugin method'); $args=func_get_args(); array_shift($args); return call_user_func_array(array($this->plugin,$method),$args); } public function path_list() { return unserialize(file_get_contents($this->command_uri(__FUNCTION__))); } public function section_list() { return unserialize(file_get_contents($this->command_uri(__FUNCTION))); } public static function subpath_url($path) { if ($path{0}!='/') $path=PHK::get_subpath().'/'.$path; $path=ereg_replace('//+','/',$path); return PHK_Util::http_base_url().((php_sapi_name()=='cgi') ? ('?_PHK_path='.urlencode($path)) : $path); } private static function cmd_usage($msg=null) { if (!is_null($msg)) echo "** ERROR: $msg\n"; echo "\nAvailable commands:\n\n"; echo "	- @help             Display package help\n"; echo "	- @license          Display license\n"; echo "	- @get <path>       Display a subfile content\n"; echo "	- @showmap          Display automap, if present\n"; echo "	- @showfiles        List subfiles\n"; echo "	- @option <name>    Display a package option\n"; echo "	- @set_interp <string>  Set the first line of the PHK to '#!<string>'\n"; echo "	- @info             Display information about the PHK file\n"; echo "	- @techinfo         Display technical information\n"; echo "	- @dump <directory> Extracts the files\n"; echo "	- @test [switches] [UnitTest]  Run the package's unit tests\n"; if (!is_null($msg)) exit(1); } public function builtin_prolog($file) { $retcode=0; try { $this->proxy()->crc_check(); $command=PHK_Util::substr($_SERVER['argv'][1],1); array_shift($_SERVER['argv']); $param=isset($_SERVER['argv'][1]) ? $_SERVER['argv'][1] : null; switch($command) { case 'get': if (is_null($param)) self::cmd_usage($command.": needs argument"); $uri=$this->uri($param); if (is_file($uri)) readfile($uri); else throw new Exception("$param: file not found"); break; case 'test': $this->test(); break; case 'showmap': case 'info': case 'techinfo': case 'showfiles': $this->$command(); break; case 'option': $res=$this->$command($param); if (is_null($res)) throw new Exception('Option not set'); echo "$res\n"; break; case 'set_interp': if (is_null($param)) self::cmd_usage($command.": needs argument"); if (file_put_contents($file ,PHK_Proxy::set_buffer_interp($file,$param))===false) throw new Exception('Cannot write file'); break; case 'license': case 'help': echo $this->auto_option($command); break; case 'dump': if (is_null($param)) self::cmd_usage($command.": needs argument"); $this->proxy()->ftree()->dump($param); break; case '': self::cmd_usage(); break; default: self::cmd_usage($command.': Unknown command'); } PHK_Util::display_slow_path(); } catch (Exception $e) { if (getenv('PHK_DEBUG')!==false) throw $e; echo "** ERROR: Command failed ($command) - ".$e->getMessage()."\n"; $retcode=1; } return $retcode; } } } if (!class_exists('PHK_Stream',false)) { class PHK_Stream extends PHK_Util { private $uri; private $mnt; private $path; private $command; private $params; private $data; private $size; private $position; private $raise_errors=true; private function raise_warning($msg) { if ($this->raise_errors) trigger_error("PHK: $msg",E_USER_WARNING); } public static function get_file($dir,$uri,$mnt,$command,$params,$path,$cache=null) { $cache_id=PHK_Cache::cache_id('node',$uri); if (is_null($data=PHK_Cache::get($cache_id))) { $can_cache=true; if (is_null($data=($dir ? PHK_Stream_Backend::get_dir_data($mnt,$command,$params,$path) : PHK_Stream_Backend::get_file_data($mnt,$command,$params,$path ,$can_cache)))) throw new Exception("$uri: File not found"); if ($can_cache && (($cache===true) || (is_null($cache) && PHK_MGR::cache_enabled($mnt,$command,$params,$path)))) PHK_Cache::set($cache_id,$data); } if ($dir && (!is_array($data))) throw new Exception('Not a directory'); if ((!$dir) && (!is_string($data))) throw new Exception('Not a regular file'); return $data; } public function stream_open($uri,$mode,$options,&$opened_path) { try { $this->uri=$uri; $this->raise_errors=($options & STREAM_REPORT_ERRORS); if ($options & STREAM_USE_PATH) $opened_path=$uri; if (($mode!='r')&&($mode!='rb')) throw new Exception($mode.': unsupported mode (Read only)'); self::parse_uri($uri,$this->command,$this->params,$this->mnt,$this->path); if (!is_null($this->mnt)) PHK_Mgr::validate($this->mnt); $this->data=self::get_file(false,$uri,$this->mnt,$this->command ,$this->params,$this->path); $this->size=strlen($this->data); $this->position=0; } catch (Exception $e) { $msg=$uri.': Open error - '.$e->getMessage(); $this->raise_warning($msg); return false; } return true; } public function stream_read($nb) { if ($this->position==$this->size) return false; $max=$this->size-($pos=$this->position); if ($nb > $max) $nb=$max; $this->position+=$nb; return substr($this->data,$pos,$nb); } public function stream_eof() { return ($this->position==$this->size); } public function stream_tell() { return $this->position; } public function stream_seek($offset,$whence) { switch($whence) { case SEEK_CUR: $this->position+=$offset; break; case SEEK_END: $this->position=$this->size+$offset; break; default: $this->position=$offset; break; } if ($this->position > $this->size) $this->position=$this->size; if ($this->position < 0) $this->position=0; return true; } public function dir_opendir($uri,$options) { try { $this->uri=$uri; $this->raise_errors=($options & STREAM_REPORT_ERRORS); self::parse_uri($uri,$this->command,$this->params,$this->mnt ,$this->path); if (!is_null($this->mnt)) PHK_Mgr::validate($this->mnt); $this->data=self::get_file(true,$uri,$this->mnt,$this->command ,$this->params,$this->path); $this->size=count($this->data); $this->position=0; } catch (Exception $e) { $msg=$uri.': PHK opendir error - '.$e->getMessage(); $this->raise_warning($msg); return false; } return true; } public function dir_readdir() { if ($this->position==$this->size) return false; return $this->data[$this->position++]; } public function dir_rewinddir() { $this->position=0; } private static function stat_array($mode,$size,$mtime) { return array( 'dev' => 0, 'ino' => 0, 'mode' => $mode, 'nlink' => 1, 'uid' => 0, 'gid' => 0, 'rdev' => -1, 'size' => $size, 'atime' => $mtime, 'mtime' => $mtime, 'ctime' => $mtime, 'blksize' => 8192, 'blocks' => 1); } public function stream_stat() { return $this->url_stat($this->uri,0,true); } public function url_stat($uri,$flags,$fstat=false) { try { $this->raise_errors=!($flags & STREAM_URL_STAT_QUIET); if (!$fstat) { self::parse_uri($uri,$this->command,$this->params,$this->mnt ,$this->path); if (!is_null($this->mnt)) PHK_Mgr::validate($this->mnt); } $cache_id=PHK_Cache::cache_id('stat',$uri); if (is_null($data=PHK_Cache::get($cache_id))) { try { $cache=true; $mode=$size=$mtime=null; PHK_Stream_Backend::get_stat_data($this->mnt,$this->command ,$this->params,$this->path,$cache,$mode,$size,$mtime); $data=array($mode,$size,$mtime); } catch (Exception $e) { $data=''; } if ($cache && (!is_null($this->mnt)) && PHK_MGR::cache_enabled($this->mnt ,$this->command,$this->params,$this->path)) { PHK_Cache::set($cache_id,$data); } } if (is_array($data)) { list($mode,$size,$mtime)=$data; return self::stat_array($mode,$size,$mtime); } else throw new Exception('File not found'); } catch (Exception $e) { $msg=$uri.': PHK Stat error - '.$e->getMessage(); $this->raise_warning($msg); return false; } } public static function parse_uri($uri,&$command,&$params,&$mnt,&$path) { if (! PHK_Mgr::is_a_phk_uri($uri=str_replace('\\','/',$orig_uri=$uri))) throw new Exception('Not a PHK URI'); $uri=substr($uri,6); if (($pos=strpos($uri,'?'))!==false) { $cmd=PHK_Util::substr($uri,$pos+1); $uri=substr($uri,0,$pos); if (($pos=strpos($cmd,'&'))!==false) { $command=substr($cmd,0,$pos); parse_str(PHK_Util::substr($cmd,$pos+1),$params); } else $command=$cmd; if ($command=='') throw new Exception('Empty command'); } $uri=trim($uri,'/'); if ($uri!='') { $a=explode('/',$uri,2); $mnt=$a[0]; $path=isset($a[1]) ? $a[1] : ''; } if (is_null($command) && is_null($mnt)) throw new Exception('Empty URI'); } } stream_wrapper_register('phk','PHK_Stream'); } if (!class_exists('PHK_Stream_Backend',false)) { class PHK_Stream_Backend { private static $tmp_data=null; private static function command_open_or_stat($stat_flag,$mnt,$command,$params ,$path,&$cache) { $cache=true; try { if (is_null($mnt)) { switch($command) { case 'test': return "Test line 1/3\nTest line2/3\nTest line 3/3\n"; break; case 'tmp': $cache=false; return self::$tmp_data; break; default: throw new Exception($command.': Unknown global command'); } } else { $proxy=PHK_Mgr::proxy($mnt); switch ($command) { case 'section': case 'magic_field': if (!isset($params['name'])) throw new Exception($command .': command needs this argument: name'); return $proxy->$command($params['name']); case 'path_list': case 'section_list': return serialize($proxy->$command()); default: throw new Exception($command.': Unknown command'); } } } catch (Exception $e) { throw new Exception($command.': Error during command execution - ' .$e->getMessage()); } } public static function get_file_data($mnt,$command,$params,$path,&$cache) { $cache=true; try { if (is_null($command)) { $node=PHK_Mgr::proxy($mnt)->ftree()->lookup_file($path,false); if (is_null($node)) return null; return $node->read(); } else { return self::command_open_or_stat(false,$mnt,$command,$params,$path,$cache); } } catch (Exception $e) { return null; } } public static function get_dir_data($mnt,$command,$params,$path) { try { if (!is_null($command)) return null; $node=PHK_Mgr::proxy($mnt)->ftree()->lookup($path,false); if (is_null($node)) return null; return $node->getdir(); } catch (Exception $e) { return null; } } public static function get_stat_data($mnt,$command,$params,$path,$cache ,&$mode,&$size,&$mtime) { if (!is_null($command)) { $mode=0100444; $size=strlen(self::command_open_or_stat(true,$mnt,$command,$params ,$path,$cache)); } else { $node=PHK_Mgr::proxy($mnt)->ftree()->lookup($path); $mode=$node->mode(); $size=$node->size(); } $mtime=PHK_Mgr::instance($mnt)->mtime(); } public static function _strip_string($str) { if (getenv('PHK_NO_STRIP')!==false) return $str; $save=self::$tmp_data; self::$tmp_data=$str; $res=php_strip_whitespace('phk://?tmp'); self::$tmp_data=$save; return $res; } public static function _include_string($str) { $save=self::$tmp_data; self::$tmp_data=$str; $res=require('phk://?tmp'); self::$tmp_data=$save; return $res; } } } if (!class_exists('PHK_DC',false)) { class PHK_DC { private $csz; private $rsz; private $flags; private $off; private $data=null; private $fspace=null; const COMPRESS_TYPE=7; const COMPRESS_NONE=0; const COMPRESS_GZIP=1; const COMPRESS_BZIP2=2; private static $compression_method_names=array('none','gzip','bzip2'); private static $compression_needed_extensions=array(null,'zlib','bz2'); public function clear_cache() { $data=null; } public function set_fspace($fspace) { $this->fspace=$fspace; } private function compression_type() { return $this->flags & self::COMPRESS_TYPE; } private function expand($buf) { $ctype=$this->compression_type(); if ($buf==='' || $ctype==self::COMPRESS_NONE) return $buf; switch($ctype) { case self::COMPRESS_BZIP2: if(is_int($rbuf=bzdecompress($buf))) throw new Exception("Cannot bzdecompress data - Error code $buf"); break; case self::COMPRESS_GZIP: if(($rbuf=gzuncompress($buf))===false) throw new Exception("Cannot gzuncompress data"); break; default: throw new Exception("Unknown compression method : $ctype"); } return $rbuf; } public function read() { if (is_null($this->data)) { if ($this->rsz==0) $this->data=''; else { $rbuf=$this->expand($this->fspace->read_block($this->off,$this->csz)); if (strlen($rbuf)!=$this->rsz) throw new Exception('Wrong expanded size'); $this->data=$rbuf; } } return $this->data; } private static function compression_ratio($rsz,$csz) { return ($rsz==0) ? '-' : (round(($csz/$rsz)*100)); } public function flag_string() { if ($ctype=$this->flags & self::COMPRESS_TYPE) return 'compress/'.self::$compression_method_names[$ctype] .' ('.self::compression_ratio($this->rsz,$this->csz).'%)'; return ''; } public function size() { return $this->rsz; } public function import($edata) { list($this->flags,$this->csz,$this->rsz,$this->off) =array_values(unpack('va/V3b',$edata)); $this->data=null; } public function __construct() { $this->set_flags(0); $this->set_data(''); $this->csz=$this->off=null; } public function set_flags($flags) { $this->flags=($flags & PHK_TNode::TN_DC_FLAG_MASK); } public function set_data($data) { $this->rsz=strlen($this->data=$data); } } } if (!class_exists('PHK_Tree',false)) { class PHK_Tree { public $fspace; private $edata; private $nodes; private static $eclasses=array( 'D' => 'PHK_TDir', 'F' => 'PHK_TFile'); public static function create_from_edata($serial_edata ,PHK_FileSpace $fspace) { $tree=new self($fspace); $tree->edata=unserialize($serial_edata); return $tree; } public function path_list() { return array_keys($this->edata); } public function path_exists($rpath) { return array_key_exists($rpath,$this->edata); } public function count() { return count($this->edata); } public function walk($method) { $args=func_get_args(); array_shift($args); foreach($this->path_list() as $path) { $node=$this->rlookup($path); call_user_func_array(array($node,$method),$args); } } private function realpath($path) { $a=explode('/',trim($path,'/')); $ra=array(); foreach($a as $comp) { switch($comp) { case '': case '.': break; case '..': if (count($ra)) array_pop($ra); break; default: $ra[]=$comp; } } if (!count($ra)) return ''; return '/'.implode('/',$ra); } public function lookup($path,$exception_flag=true) { return $this->rlookup(self::realpath($path),$exception_flag); } private function rlookup($path,$exception_flag=true) { if (array_key_exists($path,$this->edata)) { if (!array_key_exists($path,$this->nodes)) { $edata=$this->edata[$path]; $class=self::$eclasses[$edata{0}]; $node=$this->nodes[$path]=new $class($path,$this); $node->import(substr($edata,1)); } return $this->nodes[$path]; } if ($exception_flag) throw new Exception($path.': path not found'); else return null; } public function lookup_file($path,$exception_flag=true) { $f=$this->lookup($path,$exception_flag); if ((!is_null($f)) && (!($f instanceof PHK_TFile))) { if ($exception_flag) throw new Exception($path.': No such file'); else return null; } return $f; } public function display_header($html) { if ($html) echo '<table border=1 bordercolor="#BBBBBB" cellpadding=3 ' .'cellspacing=0 style="border-collapse: collapse"><tr><th>T</th>' .'<th>Name</th><th>Size</th><th>Flags</th></tr>'; } public function display_footer($html) { if ($html) echo '</table>'; } public function display($link) { $html=PHK_Util::is_web(); $this->display_header($html); $this->walk('display',$html,$link); $this->display_footer($html); } public function display_packages() { $html=PHK_Util::is_web(); ob_start(); $this->walk('display_package',$html); $data=ob_get_clean(); if ($data!=='') { $this->display_header($html); $this->walk('display_package',$html); $this->display_footer($html); } } public function dump($base) { $this->walk('dump',$base); } public static function dir_base_name($path) { $dir=ereg_replace('/[^/]*$','',$path); $base=ereg_replace('^.*/','',$path); return array($dir,$base); } private function __construct($fspace) { $this->fspace=$fspace; $this->nodes=array(); } } } if (!class_exists('PHK_TNode',false)) { abstract class PHK_TNode { protected $flags; protected $path; protected $tree=null; const TN_DC_FLAG_MASK=PHK_DC::COMPRESS_TYPE; const TN_STRIP_SOURCE=8; const TN_NO_AUTOLOAD=16; const TN_PKG=32; abstract public function type(); public function display_package($html) {} public function is_package() { return ($this->flags & self::TN_PKG); } public function getdir() { throw new Exception($this->path.': Cannot getdir() on a '.$this->type()); } public function read() { throw new Exception($this->path.': Cannot read() a '.$this->type()); } protected function flag_string() { $flag_string=''; if ($this->flags & self::TN_PKG) $flag_string .=',package'; else { if ($this->flags & self::TN_STRIP_SOURCE) $flag_string .=',strip'; if ($this->flags & self::TN_NO_AUTOLOAD) $flag_string .=',no_autoload'; } return $flag_string; } protected function __construct($path,$tree) { $this->path=$path; $this->tree=$tree; $this->flags=0; } protected function import($edata) { list($this->flags)=array_values(unpack('va',$edata)); return substr($edata,2); } } } if (!class_exists('PHK_TDir',false)) { class PHK_TDir extends PHK_TNode { private $children; public function type() { return 'dir'; } public function mode() { return 040555; } public function size() { return count($this->children); } public function get_needed_extensions() {} public function display($html,$link) { $path=$this->path; if ($path=='') $path='/'; if ($html) echo '<tr><td nowrap colspan=4>&nbsp;<b><i>'.$path .'</i></b></td></tr>'; else echo "D $path\n"; } public function getdir() { return $this->children; } public function dump($base) { $path=$base.$this->path; if (mkdir($path)===false) throw new Exception($path.': cannot create directory'); } public function import($edata) { $this->children=explode(';',parent::import($edata)); } public function __construct($path,$tree) { parent::__construct($path,$tree); $this->children=array(); } public function subpath($name) { return $this->path.'/'.$name; } } } if (!class_exists('PHK_TFile',false)) { class PHK_TFile extends PHK_TNode { private $dc; public function type() { return 'file'; } public function mode() { return 0100444; } public function __call($method,$args) { try { return call_user_func_array(array($this->dc,$method),$args); } catch (Exception $e) { throw new Exception($this->path.': '.$e->getMessage()); } } public function read() { return $this->dc->read(); } public function flag_string() { $string=parent::flag_string().','.$this->dc->flag_string(); $string=trim($string,','); return $string; } public function display_package($html) { if ($this->flags & self::TN_PKG) $this->display($html); } public function display($html,$link=false) { $flag_string=$this->flag_string(); $path=$this->path; if ($html) { if ($this->flags & self::TN_PKG) $link=false; $field= ($link ? '<a href="'.PHK::subpath_url('/view/' .trim($path,'/')).'">'.$path.'</a>' : $path); echo '<tr><td nowrap>F</td><td nowrap>'.$field.'</td><td nowrap>' .$this->size().'</td><td nowrap>'.$flag_string.'</td></tr>'; } else { if ($flag_string!='') $flag_string = ' ('.$flag_string.')'; echo 'F '.str_pad($this->size(),11).' '.$path.$flag_string."\n"; } } public function dump($base) { $path=$base.$this->path; if (file_put_contents($path,$this->read())===false) throw new Exception($path.': cannot dump file'); } public function __construct($path,$tree) { parent::__construct($path,$tree); $this->dc=new PHK_DC(); $this->dc->set_fspace($tree->fspace); } public function import($edata) { $this->dc->import(parent::import($edata)); } public function set_flags($flags) { parent::set_flags($flags); $this->dc->set_flags($flags); } } } if (!class_exists('PHK_Webinfo',false)) { class PHK_Webinfo { const VERSION='0.2.5'; private $PHK; private $cmd_titles=array( 'info' => 'Home', 'techinfo' => 'Technical information', 'showmap' => 'Automap', 'showfiles' => 'Files', 'test' => 'Unit tests'); public function __construct($phk) { $this->PHK=$phk; PHK_Mgr::set_cache(false); } private static function display_tab($url,$name) { echo '<li id="'.$name.'"><a href="'.PHK::subpath_url($url) .'"><span>'.$name.'</span></a></li>'; } private function header($title=null) { if (is_null($name=$this->PHK->option('name'))) $name=basename($this->PHK->path()); $win_title=(is_null($title) ? $name : "$name - $title"); echo '<head>' ."<title>$win_title</title>" .'<link href="'.PHK::subpath_url('/php_section/STATIC/tabs/tabs.css.php') .'" rel="stylesheet" type="text/css">' ."<style type=text/css><!--\n" ."a,a:active,a:link { color: blue; text-decoration: none; }\n" ."a:hover { color: blue; text-decoration: underline; }\n" .'--></style>' ."</head>\n"; echo '<table width=100% border=0 cellpadding=0 cellspacing=0>'; echo '<tr><td><div class="tabs"><ul>'; self::display_tab('/info','Home'); if (!is_null($this->PHK->option('help_prefix'))) self::display_tab('/auto_option/help','Help'); if (!is_null($this->PHK->option('license_prefix'))) self::display_tab('/auto_option/license','License'); self::display_tab('/techinfo','Info'); self::display_tab('/showfiles','Files'); if ($this->PHK->map_defined()) self::display_tab('/showmap','Automap'); if ((!is_null($this->PHK->option('test_script'))) ||(!is_null($this->PHK->option('phpunit_test_package')))) self::display_tab('/test','Tests'); if (!is_null($tabs=$this->PHK->option('tabs'))) foreach($tabs as $n => $url) self::display_tab($url,$n); echo '</ul></div></td></tr>'; $bg_string=(is_null($opt=$this->PHK->option('icon_bgcolor')) ? '' : 'bgcolor="'.$opt.'"'); if (is_null($icon_width=$this->PHK->option('icon_width'))) $icon_width='150'; echo '<tr><td width=100%><table width=100% border=1 bordercolor="#aaaaaa"' .' cellpadding=3 cellspacing=0>'; echo "<tr><td width=$icon_width $bg_string align=center>"; $url=$this->PHK->option('url'); if (!is_null($url)) echo '<a href="'.$url.'" target=_blank>'; if (!is_null($icon_path=$this->PHK->option('icon'))) echo '<img border=0 src="'.PHK::subpath_url('/file/'.trim($icon_path,'/')) .'" alt="Package Home">'; elseif (!is_null($url)) echo '&lt;Website&gt;'; if (!is_null($url)) echo '</a>'; echo "</td>\n"; echo '<td bgcolor="#D7E2FF" align=center><h1>'.$name.'</h1></td>'; echo '<td width=151 align=center><a href="http://phk.tekwire.net"' .' target=_blank><img width=151 height=88 border=0 src="' .PHK::subpath_url('/section/STATIC/phk_logo.png') .'" alt="PHK Home"></a></td>'; echo '</tr>'; echo '</table></td></tr></table>'; if (!is_null($title)) echo "<p><h1>$title</h1>"; @flush(); } public function run() { if (isset($_REQUEST['debug'])) { echo "<hr>"; echo "<h2>Environment:</h2>"; echo "<h3>_REQUEST :</h3>"; echo "<pre>"; var_dump($_REQUEST); echo "</pre>"; echo "<h3>_SERVER :</h3>"; echo "<pre>"; print_r($_SERVER); echo "</pre>"; } $command=trim(PHK::get_subpath(),'/'); if (($pos=strpos($command,'/'))!==false) { $arg=substr($command,$pos+1); $command=substr($command,0,$pos); } else $arg=''; if ($command=='') $command='info'; self::send_cache_header(); switch($command) { case 'view': $arg='/'.$arg; $this->header("File: $arg"); $path=$this->PHK->uri($arg); if (!is_file($path)) { echo '* ERROR: '.$arg.': File not found<p>'; break; } echo "<table border=0>\n"; echo '<tr><td>Size:</td><td>'.filesize($path).'</td></tr>'; echo '<tr><td>Storage flags:</td><td>' .$this->PHK->proxy()->ftree()->lookup($arg)->flag_string().'</td></tr>'; echo "</table><hr/>"; switch($mime_type=$this->PHK->mime_type($arg)) { case 'application/x-httpd-php': highlight_file($path); break; case 'text/html': echo PHK_Util::readfile($path); break; default: if (strpos($mime_type,'image/')===0) echo 'Image: <img src="'.PHK::subpath_url('/file'.$arg).'">'; else echo '<pre>'.htmlspecialchars(PHK_Util::readfile($path)) .'</pre>'; } break; case 'run': $this->header(); eval($this->PHK->web_tunnel($arg,true)); break; case 'file': eval($this->PHK->web_tunnel($arg,true)); return; case 'info': case 'techinfo': case 'envinfo': case 'showmap': case 'showfiles': case 'test': if (isset($this->cmd_titles[$command])) $t=$this->cmd_titles[$command]; else $t=ucfirst($command); $this->header($t); $this->PHK->$command(array(__CLASS__,'view_subfile_url')); break; case 'auto_file': $this->header(); echo $this->PHK->auto_file('/'.$arg); break; case 'auto_option': $this->header(ucfirst($arg)); echo $this->PHK->auto_option($arg); break; case 'php_section': require($this->PHK->section_uri($arg)); return; case 'section': eval($this->PHK->web_tunnel('/?section&name='.$arg,true)); return; default: echo '<b>'.$command.': Unknown subcommand</b><p>'; } self::footer(); } public static function view_subfile_url($fname) { return PHK::subpath_url('/view/'.trim($fname,'/')); } private static function send_cache_header() { header('Expires: '.gmdate('D, d M Y H:i:s \G\M\T',time()+600)); header('Cache-Control: public, max-age=600'); header('Last-Modified: '.gmdate('D, d M Y H:i:s \G\M\T',time())); } private static function footer() { echo '<hr>'; echo '<font size="-1"><i>For more information about the PHK package format:' .' <a href="http://phk.tekwire.net" target="_blank">' .'http://phk.tekwire.net</i></font>'; } } } if (!function_exists('_phk_load_phpunit_interface')) { function _phk_load_phpunit_interface() { if (!class_exists('PHPUnit_Runner_PHKTestSuiteLoader',false)) { class PHPUnit_Runner_PHKTestSuiteLoader implements PHPUnit_Runner_TestSuiteLoader { public function load($suiteClassName, $suiteClassFile = '') { if (class_exists($suiteClassName, true)) { return new ReflectionClass($suiteClassName); } else throw new RuntimeException("Class $suiteClassName could not be found"); } public function reload(ReflectionClass $aClass) { return $aClass; } } } if (!class_exists('PHPUnit_TextUI_PHK',false)) { class PHPUnit_TextUI_PHK { public static function main() { PHPUnit_Util_Filter::addFileToFilter(__FILE__, 'PHPUNIT'); self::handleLoader('PHPUnit_Runner_PHKTestSuiteLoader'); $arguments=self::handleArguments(); $runner= new PHPUnit_TextUI_TestRunner; $suite = $runner->getTest($arguments['test'],'',$arguments['syntaxCheck']); try { if (PHK_Util::is_web()) echo "<pre>\n"; $result = $runner->doRun($suite,$arguments); if (PHK_Util::is_web()) echo "</pre>\n"; } catch (Exception $e) { throw new RuntimeException('Could not create and run test suite: ' . $e->getMessage()); } if (!PHK_Util::is_web()) { if ($result->wasSuccessful()) exit(PHPUnit_TextUI_TestRunner::SUCCESS_EXIT); else if($result->errorCount() > 0) exit(PHPUnit_TextUI_TestRunner::EXCEPTION_EXIT); else exit(PHPUnit_TextUI_TestRunner::FAILURE_EXIT); } } protected static function handleArguments() { $arguments = array('syntaxCheck' => TRUE); $longOptions = array( 'configuration=', 'exclude-group=', 'filter=', 'group=', 'help', 'loader=', 'log-json=', 'log-tap=', 'log-xml=', 'repeat=', 'skeleton', 'stop-on-failure', 'tap', 'testdox', 'testdox-html=', 'testdox-text=', 'no-syntax-check', 'verbose', 'version', 'wait'); if (class_exists('Image_GraphViz', FALSE)) $longOptions[] = 'log-graphviz='; if (extension_loaded('pdo')) { $longOptions[] = 'test-db-dsn='; $longOptions[] = 'test-db-log-rev='; $longOptions[] = 'test-db-log-prefix='; $longOptions[] = 'test-db-log-info='; } if (extension_loaded('xdebug')) { $longOptions[] = 'coverage-html='; $longOptions[] = 'coverage-xml='; $longOptions[] = 'log-metrics='; $longOptions[] = 'log-pmd='; $longOptions[] = 'report='; } try { $options = PHPUnit_Util_Getopt::getopt( isset($_SERVER['argv']) ? $_SERVER['argv'] : array(),'d:',$longOptions); } catch (RuntimeException $e) { PHPUnit_TextUI_TestRunner::showError($e->getMessage()); } $arguments['test']=(isset($options[1][0]) ? $options[1][0] : 'AllTests'); $arguments['testFile'] = ''; foreach ($options[0] as $option) { switch ($option[0]) { case '--configuration': $arguments['configuration'] = $option[1]; break; case '--coverage-xml': $arguments['coverageXML'] = $option[1]; break; case 'd': $ini = explode('=', $option[1]); if (isset($ini[0])) { if (isset($ini[1])) { ini_set($ini[0], $ini[1]); } else ini_set($ini[0], TRUE); } break; case '--help': self::showHelp(); exit(PHPUnit_TextUI_TestRunner::SUCCESS_EXIT); break; case '--filter': if (preg_match('/^[a-zA-Z0-9_]/', $option[1])) $arguments['filter'] = '/^' . $option[1] . '$/'; else $arguments['filter'] = $option[1]; break; case '--group': $arguments['groups'] = explode(',', $option[1]); break; case '--exclude-group': $arguments['excludeGroups'] = explode(',', $option[1]); break; case '--loader': self::handleLoader($option[1]); break; case '--log-json': $arguments['jsonLogfile'] = $option[1]; break; case '--log-graphviz': $arguments['graphvizLogfile'] = $option[1]; break; case '--log-tap': $arguments['tapLogfile'] = $option[1]; break; case '--log-xml': $arguments['xmlLogfile'] = $option[1]; break; case '--log-pmd': $arguments['pmdXML'] = $option[1]; break; case '--log-metrics': $arguments['metricsXML'] = $option[1]; break; case '--repeat': $arguments['repeat'] = (int)$option[1]; break; case '--stop-on-failure': $arguments['stopOnFailure'] = TRUE; break; case '--test-db-dsn': $arguments['testDatabaseDSN'] = $option[1]; break; case '--test-db-log-rev': $arguments['testDatabaseLogRevision'] = $option[1]; break; case '--test-db-prefix': $arguments['testDatabasePrefix'] = $option[1]; break; case '--test-db-log-info': $arguments['testDatabaseLogInfo'] = $option[1]; break; case '--coverage-html': case '--report': $arguments['reportDirectory'] = $option[1]; break; case '--skeleton': if (isset($arguments['test'])) self::doSkeleton($arguments['test'],''); else { self::showHelp(); exit(PHPUnit_TextUI_TestRunner::EXCEPTION_EXIT); } break; case '--tap': $arguments['printer'] = new PHPUnit_Util_Log_TAP; break; case '--testdox': $arguments['printer'] = new PHPUnit_Util_TestDox_ResultPrinter_Text; break; case '--testdox-html': $arguments['testdoxHTMLFile'] = $option[1]; break; case '--testdox-text': $arguments['testdoxTextFile'] = $option[1]; break; case '--no-syntax-check': $arguments['syntaxCheck'] = FALSE; break; case '--verbose': $arguments['verbose'] = TRUE; break; case '--version': PHPUnit_TextUI_TestRunner::printVersionString(); exit(PHPUnit_TextUI_TestRunner::SUCCESS_EXIT); break; case '--wait': $arguments['wait'] = TRUE; break; } } if (!isset($arguments['test']) && isset($arguments['configuration'])) { $configuration= new PHPUnit_Util_Configuration($arguments['configuration']); $testSuite = $configuration->getTestSuiteConfiguration(); if ($testSuite !== NULL) $arguments['test'] = $testSuite; } if ((isset($arguments['testDatabaseLogRevision']) && !isset($arguments['testDatabaseDSN']))) { self::showHelp(); exit(PHPUnit_TextUI_TestRunner::EXCEPTION_EXIT); } return $arguments; } protected static function doSkeleton($test, $testFile) { if ($test !== FALSE) { PHPUnit_TextUI_TestRunner::printVersionString(); try { $skeleton = new PHPUnit_Util_Skeleton($test, $testFile); $skeleton->write(); } catch (Exception $e) { print $e->getMessage() . "\n"; printf('Could not write test class skeleton for "%s" to "%s".' . "\n", $test,$testFile); exit(PHPUnit_TextUI_TestRunner::FAILURE_EXIT); } printf('Wrote test class skeleton for "%s" to "%s".' . "\n", $test,$skeleton->getTestSourceFile()); exit(PHPUnit_TextUI_TestRunner::SUCCESS_EXIT); } } protected static function handleLoader($loaderName) { if (!class_exists($loaderName, FALSE)) { PHPUnit_Util_Fileloader::checkAndLoad(str_replace('_', '/', $loaderName) . '.php'); } if (class_exists($loaderName, FALSE)) { $class = new ReflectionClass($loaderName); if ($class->implementsInterface('PHPUnit_Runner_TestSuiteLoader') && $class->isInstantiable()) { $loader = $class->newInstance(); } } if (!isset($loader)) { PHPUnit_TextUI_TestRunner::showError( sprintf('Could not use "%s" as loader.',$loaderName)); } PHPUnit_TextUI_TestRunner::setLoader($loader); } public static function showHelp() { PHPUnit_TextUI_TestRunner::printVersionString(); print "Usage: php <package> [switches] [UnitTest]\n\n"; if (class_exists('Image_GraphViz', FALSE)) { print "  --log-graphviz <file>  Log test execution in GraphViz markup.\n"; } print "  --log-json <file>      Log test execution in JSON format.\n" . "  --log-tap <file>       Log test execution in TAP format to file.\n" . "  --log-xml <file>       Log test execution in XML format to file.\n"; if (extension_loaded('xdebug')) { print "  --log-metrics <file>   Write metrics report in XML format.\n" . "  --log-pmd <file>       Write violations report in PMD XML format.\n\n" . "  --coverage-html <dir>  Generate code coverage report in HTML format.\n" . "  --coverage-xml <file>  Write code coverage information in XML format.\n\n"; } if (extension_loaded('pdo')) { print "  --test-db-dsn <dsn>    DSN for the test database.\n" . "  --test-db-log-rev <r>  Revision information for database logging.\n" . "  --test-db-prefix ...   Prefix that should be stripped from filenames.\n" . "  --test-db-log-info ... Additional information for database logging.\n\n"; } print "  --testdox-html <file>  Write agile documentation in HTML format to file.\n" . "  --testdox-text <file>  Write agile documentation in Text format to file.\n\n" . "  --filter <pattern>     Filter which tests to run.\n" . "  --group ...            Only runs tests from the specified group(s).\n" . "  --exclude-group ...    Exclude tests from the specified group(s).\n\n" . "  --loader <loader>      TestSuiteLoader implementation to use.\n" . "  --repeat <times>       Runs the test(s) repeatedly.\n\n" . "  --tap                  Report test execution progress in TAP format.\n" . "  --testdox              Report test execution progress in TestDox format.\n\n" . "  --no-syntax-check      Disable syntax check of test source files.\n" . "  --stop-on-failure      Stop execution upon first error or failure.\n" . "  --verbose              Output more verbose information.\n" . "  --wait                 Waits for a keystroke after each test.\n\n" . "  --skeleton             Generate skeleton UnitTest class for Unit in Unit.php.\n\n" . "  --help                 Prints this usage information.\n" . "  --version              Prints the version and exits.\n\n" . "  --configuration <file> Read configuration from XML file.\n" . "  -d key[=value]         Sets a php.ini value.\n"; } } } } } 
+a:12:{s:0:"";s:42:"D  FTREE;AUTOMAP;STATIC;OPTIONS;BUILD_INFO";s:8:"/AUTOMAP";s:17:"F    Æ   Æ   Ï  ";s:11:"/BUILD_INFO";s:17:"F          ÄY  ";s:6:"/FTREE";s:17:"F    Ï  Ï      ";s:8:"/OPTIONS";s:17:"F        ´W  ";s:7:"/STATIC";s:20:"D  tabs;phk_logo.png";s:20:"/STATIC/phk_logo.png";s:17:"F    i<  i<  K  ";s:12:"/STATIC/tabs";s:45:"D  left.gif;right.gif;bottom.gif;tabs.css.php";s:23:"/STATIC/tabs/bottom.gif";s:17:"F    #   #   p  ";s:21:"/STATIC/tabs/left.gif";s:17:"F    Â  Â  •  ";s:22:"/STATIC/tabs/right.gif";s:17:"F    
+  
+  W  ";s:25:"/STATIC/tabs/tabs.css.php";s:17:"F    ¸  ¸  “  ";}a:9:{s:0:"";s:22:"D  classes;etc;scripts";s:8:"/classes";s:34:"D  Automap.php;Automap_Creator.php";s:20:"/classes/Automap.php";s:17:"F    =P  =P      ";s:28:"/classes/Automap_Creator.php";s:17:"F    º.  º.  =P  ";s:4:"/etc";s:26:"D  license.htm;license.txt";s:16:"/etc/license.htm";s:17:"F   )  )  ÷~  ";s:16:"/etc/license.txt";s:17:"F   ^,  ^,  ”¨  ";s:8:"/scripts";s:22:"D  Automap_Builder.php";s:28:"/scripts/Automap_Builder.php";s:17:"F    ß  ß  òÔ  ";}AUTOMAP  M M1.1.0        V1.1.0        FS198     a:2:{s:3:"map";a:2:{s:8:"Lautomap";s:20:"Sclasses/Automap.php";s:16:"Lautomap_creator";s:28:"Sclasses/Automap_Creator.php";}s:7:"options";a:0:{}}GIF89a	 ,Õ  ö÷ùñô÷öøúüışúûüùúûøùúêïóïóöÆÕßÒŞæØâéŞçíİæìåìñèîòô÷ùóöø³ÈÕÁÒİËÙâÏÜäÖáè–´Å¹É¯ÂÍ»ÎÙÃÔŞÂÓİÈ×àÌÚâÕáèÙäê×âèåìğëğó„°ÇÑŞåÜæëãëïëñôîóõ÷úûûüüÿÿÿşşş                                                      ,    	 , ÿ@–P±É`H$!%Cq Ve2X­ŠÌJ(“Ä +€˜32$ÀÆ ¼kvŠä-Ëçõu*…"}ã|}|~q("$f„'l(Œ&&$r‘™›&! )¢¤›{¨£¥r­ª°©¯„±¯¬´¦·»º³®«§¾¶ÃÂÀ¿²¹ÇÄËÆ²ÌÉÎµÒ½Í¼„ÔÈÓ×Ğ¸ÙİÕÏÙÊâÜßãçæê¾äÛÅëÇíáîÖìéïøñ÷õüÑğåùü¤Pß?‚ƒœÇÛBmåAœÎáÀ†%VÜˆî!Çk÷Ø/áÄ;^¤¨²$Æ–#Mf)fÍ‡(WÎL‰“æKçÒ„° ’I)L:eD¡Cµ´x*4U¨h 
+%A«£^ÁNKb¬Ùe§X±‚ ´k»x!ÁÖí—2tİÖ	 !¯š5tÛæé—À]$¬´%ƒXíâ.i[¬]Y­•ÊfEëõkg`µ††:zëçÒ;£}ºµj×aa‹–Mš¶é×¸cç½»vïÛºƒóî›8ğáÈ‹'?®¼9óç©G_>İyuè¬_ß]zwêß­‡Ç¾º¼mîæµG~½ûôŞáƒ—/>ùööÙ«Ïÿ¿ÿıÿÅà|ÖWà} v ;GIF89a,Õ  ö÷ùñô÷öøúüışúûüùúûøùúêïóïóöÆÕßÒŞæØâéŞçíİæìåìñèîòô÷ùóöø³ÈÕÁÒİËÙâÏÜäÖáè–´Å¹É¯ÂÍ»ÎÙÃÔŞÂÓİÈ×àÌÚâÕáèÙäê×âèåìğëğó„°ÇÑŞåÜæëãëïëñôîóõ÷úûûüüÿÿÿşşş                                                      ,    , ÿ@’pH,È¤rÉl:ŸĞ¨tJ­Z¯Ø¬v•h<¬pkL.›Ïè´zÍn»ßğ¸|N¯Ûïø¼~ÏwVa+‡ˆ‰Š‹Œ‘’“”•–—˜™š›œŸ “*)^,*ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃ¶)'ÆÎÏĞÑÒÓÔÕÖ×ØÙÚÛÜİŞßàáâãäåæÚ¥("ğñòóôõö÷øùúûüışÿ 
+H° ÁƒòK"ƒRHœH±¢Å‹3jÜÈ±£Ç CŠI²¤É“(Sª\éÅu&@€ Á²¦Í›8sêÜÉ³§Oÿ–(Â±€DĞ£H“*]Ê´©Ó§P£JJµªÕ«X³jİÊµ«×¯S84± ‰hÓª]Ë¶­Û·pãÊK·®İ»xóêİË·¯ß¿€Ó} âDÌf(^Ì¸±ãÇ#KL¹²åË˜3kŞÌ¹³çÏ C‹m¹ğCÄHœXÍºµë×°cËM»¶íÛ¸sëŞÍ»·ïßÀƒN÷ÃJ” Á®¹óçĞ£KŸN½ºõëØ³kßÎ½»÷ïàÃ‹O¾<v1‘+_.³½û÷ğãËŸO¿¾ıûøóëßÏ¿¿ÿÿ (à€˜_YÉ•@Árˆ5èàƒF(á„Vhá…f¨á†vèÿá‡ †(âˆ$–¨a‚¤H‚‰,¶èâ‹0Æ(ãŒ4Öhâ	*¨"<öèã@)äDiä‘H&©ä’L6éä“PF)å”T&©\Š;V©å–\véå—`†)æ˜Z^‰%	d¦©æšl¶éæ›pşhf–qÖiçxæ©ç—sR€æ€*è „ÂÙçŸ…&ªè¢Œ6:ä¡F*é¤”Æ	i¥˜fªé¦O^Êé§ †Ê©§¢–jê©„’Šêª¬¶Ê¦ª®Æ*ë¬SÂJë­¸æ*¤­ºöêë¬¼ş*ì°¥Kì±ÈVjl²Ì6›è²ÎF+-ĞNkíµkV‹í¶Üv©m·à†Û©tŠkî¹Q~‹ÿîºìò¨n»ğšûn¼ôr;o½øN{o¾ü2»o¿ ûoÀë:pÁK®Ÿ	7íÁGl*ÄWü)ÅgŒ)Æw)Ç‡¬(È"—,(É&§œ'Ê*·léÂˆº,3¥,Ïl3™5ß¬3Ÿ0ïìó³=ÿ,t 9m´“E­´•A/ít›I?-5QOm5U_=uÖZ?Íu×KöÑb=tÙfÿŒvÚ;¯ÍöÍn¿=sÜr»Lwİ*ß·Ézï-rß~{xàN¸Å†.qâŠ;Ìxã	?yÁ’Opå–÷‹yæùnÎy½oè¢·Kzéëú¹ª¯.në®ƒ{ìö6Mÿ»Ö³ß~mîºëk{ïRó¼³ÂïïïÆ+]|òÇ.Ï¼ÀÈ?/´óÒûJ}õG½Î×ok÷Ş+Œ%Ãá«­}ùvŸ~Şê¯Ïwûîÿü‚ÏOáößxşú/Îÿû #'ÀR®€¼¨¹2°s| è"(ÁÑQ°‚¦» S§Á²®ƒ|C(»’°vã‹Ù		˜ÂF|.dc82ÒPZ3¼aªl¨Ãfå°‡Dã!‘õÃ!ê©ˆF¤–“(,$2±NN|¢¡–(Åìµ°ŠL!¶ÈÅ.zñ‹`£ÇHÆ.zaH£×ÈÆ6ºñpŒ£çHÇ:ÚÿñxÌ£÷ÈÇ>úñ€dÇ@€ ‚‚L¤"ÉÈF:ò‘Œ¤$9†  (8…&ÉÉNzò“ ¥(G©FB^²!Ë¨ )WÉÊVºò•°l¤)1™wÄò–¸Ì¥.wÊYºäƒà¥0‡IÌbó¾|ÉHpÌf:ó™ĞìepJ±ˆ€}È¦6·ÉÍnzó›à§8û0 Â%"¸æ8×ÉÎvºóğŒ§<ÉPÎQ`ò%×$€>÷ÉÏ~úóŸ ¨@JĞ‚ô M¨BÊĞ†:ô¡¨D'ZPKF Ö¼&16ÊÑzô£ ©HGJRb ÷Lç5ÏÁÒ–ºô¥ÿ0©LgJÓšš#(e>¯‰Óúô§@ªP‡JÔ¢õ¨HMªR—ÊÔ¦:õ©PªT§JÕª&5;%U·ÊÕ®zõ«`«XÇJV«ÂC§‹ÑjY×ÊÖ¶ºõ­p«\ŠU´À¦xÍ«^÷Ê×¾úõ¯ĞÀi)$‚”ô°ˆM¬bËØÆ:vˆ,à²˜Í¬f7ËÙÎzö³ ­hGKÚÒšö´¨M­jWËÚÖºöµ°­*$ÛSPô¶¸Í­nwËÛŞúö·ÀÅm + „â¸ÈM®r—ËÜæ:÷¹ĞE®?±9ÏêZ÷ºØÍ®v¿9€î"‚ºÛ¯xÇKŞòb—™ÑLÿ¯z×Ë^A¢·½ğ¯|ç†÷Ò÷¾øÍ¯0í«ßşú÷¿¡ä/€Là»×ÀN°‚ï(à;øÁ	n0„'LaıJ¸ÂÎ0{/¬á{Ø˜ş°ˆG|Ë“øÄ(¥‰SÌâCrÅ.±Œ	ãÛøÆv¬1wÌc6ê¸Ç@ŞñƒLd¹ÈHNñ‘“Ìd/¹ÉPÎğ“£LeO¹ÊXp–·|â+sùËıõ2˜ÇL_1“ùÌí53š×M5³ùÍÇt3œç¼_:ÛÙÂwÎs™õÌgøÊ¹Ï€p ıÌ?úĞ/F´¢ë¼èFãÒĞt!-éJã‘Ò–Îô1­éN»‘ÓuÿA-êP“ºÔ>5ª3­êUWºÕ®4¬cİèYÓZÑ¶¾õ¡s­ëAóº×€ş5°ù,ìaç¹ØÆ¶3²“=çe3ûÍÎ~öš£-í3S»Úc¾6¶¿¬ímo¹ÛŞÆ2¸ÃMåq“Êæ>7“Ó­n$³»İD~7¼,ïyó¸ŞöÆ1¾ómã}óÛÈÿvµ¿Şâ\É/µÁNâ…3ÜÉ÷´Ã#Şá‰S\ÊguÆ-mñO¸ã0ÈC¾à‘“\Ë'_´ÉS^à•³|À.ùc.ó0×œĞ4¿9~s®ó=÷¼Ï<ÿy|ƒ.ô4]ÏD?ºz“®ô67]ÙO§3Ó£ŞÌ©SÄW‡vÖÙl>õ­3Úëdî:Øu)ö±?ÚìÙF;˜Ë®öW²½í­|;ÜW)÷¹²îvtŞË½w¾÷İ|à×=xÂŞİA  ;GIF89a  €  „°Ç   ,       D ;<?php
+//=============================================================================
+//
+// Copyright Francois Laupretre <phk@tekwire.net>
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+//=============================================================================
+
+//-- We must change the returned mime type (default is text/html)
+//-- And we must do it before any output
+
+header('Content-type: text/css');
+
+//=============================================================================
+?>
+
+/* tabs styles, based on http://www.alistapart.com/articles/slidingdoors */
+
+DIV.tabs
+{
+   float            : left;
+   width            : 100%;
+   background       : url('<?php echo PHK::subpath_url('/section/STATIC/tabs/bottom.gif'); ?>') repeat-x bottom;
+   margin-bottom    : 0px
+}
+
+DIV.tabs UL
+{
+   margin           : 0px;
+   padding-left     : 10px;
+   list-style       : none;
+}
+
+DIV.tabs LI, DIV.tabs FORM
+{
+   display          : inline;
+   margin           : 0px;
+   padding          : 0px;
+}
+
+DIV.tabs FORM
+{
+   float            : right;
+}
+
+DIV.tabs A
+{
+   float            : left;
+   background       : url('<?php echo PHK::subpath_url('/section/STATIC/tabs/right.gif'); ?>') no-repeat right top;
+   border-bottom    : 1px solid #84B0C7;
+/*   font-size        : x-small;*/
+   font-weight      : bold;
+   text-decoration  : none
+}
+
+DIV.tabs A:hover
+{
+   background-position: 100% -150px;
+}
+
+DIV.tabs A:link, DIV.tabs A:visited,
+DIV.tabs A:active, DIV.tabs A:hover
+{
+       color: #1A419D;
+}
+
+DIV.tabs SPAN
+{
+   float            : left;
+   display          : block;
+   background       : url('<?php echo PHK::subpath_url('/section/STATIC/tabs/left.gif'); ?>') no-repeat left top;
+   white-space      : nowrap; padding-left:9px; padding-right:9px; padding-top:5px; padding-bottom:5px
+}
+
+DIV.tabs INPUT
+{
+   float            : right;
+   display          : inline;
+   font-size        : 1em;
+}
+
+DIV.tabs TD
+{
+/*   font-size        : x-small;*/
+   font-weight      : bold;
+   text-decoration  : none;
+}
+
+
+
+/* Commented Backslash Hack hides rule from IE5-Mac \*/
+DIV.tabs SPAN {float : none;}
+/* End IE5-Mac hack */
+
+DIV.tabs A:hover SPAN
+{
+   background-position: 0% -150px;
+}
+
+DIV.tabs LI#current A
+{
+   background-position: 100% -150px;
+   border-width     : 0px;
+}
+
+DIV.tabs LI#current SPAN
+{
+   background-position: 0% -150px;
+   padding-bottom   : 6px;
+}
+
+DIV.nav
+{
+   background       : none;
+   border           : none;
+   border-bottom    : 1px solid #84B0C7;
+}
+‰PNG
+
+   IHDR   —   X   ø!e   bKGD ÿ ÿ ÿ ½§“   	pHYs     šœ   tIME×00‡Eÿ?    IDATxÚí½i¬$Ùu&ö{o,¹¿ıÕÚUÕÕì}å*‘îwŠÔ”ÆI3Ğ,6 Àğÿ¶X2,Ã²€‘Ûğ Éc${ÆÚ†‹(5)J×^Øİd5»ØK-¯¶·çÛ½÷øÇÌŒÈå½Wìn5î,^FfDd,_œ{Îw¾s.áu¾˜F³ØºÉŞk/™€€jP¥JµF­ZƒÎz> Âqšò3ñ€¯zØÜÍ2$iÌYk™ìê1Á‹+Ä•*Y!aX <üODxëõ·ëõºî˜Ö,·oØÖËôDôwo\µŸhïñƒ==‹ö.Óş#‰ / ‚-Ââ
+ayM ¹HªºÙ\¤íF‹ºÂn’àRãz<à­h€nq\©RºzœôñÓd–×…ñ|02  óÿ3SgÏ.óËÙƒFã=û5ı3Oı•nílYÙšü&Æï‹Ë”/ åAH¨T	µ&ñÒ*aqEp£(E=?Äz‹6-lVkÔ’z:Ã•$æ«ñ ÛYÂ©¶–)^?IÉÚI¡›d=,"b ú-kø#.fö/¾ xéyı‹/|Kÿ'_}2[èí3ña@šóİÔAÌ %åH$ÂèVÖ‰—×‰„°BìTª´QmàZ¥F{¾(¬’Õ¯Æ¾¤3Úq²°DÙÒÅÕ:ö–)«7`Ã
+Yé!&B@š[CûHàbæğ{Ïeïú+úW?óûñ;¯]²’y>¨æ‚lˆúıËDÎ€@­AXX!n-‘­ÖA´a+uÚ²/y>úAˆ¸Ö$-$6=¼jÚaÑÂ2e•*öÃzÍe$‹+”UëĞJ¡ äÃ²%"~N? ¸˜9üîÓÙÇşúÏÒ_ùÜÄìm³œipøxäu_È³„ãÿnH®7	õqµV€Z“¸± á:[Üò|t+uTk”d	_µ»~@ZQXÅ@*t-ê¯GiÒj± èè­áÿŸ¬ X•×^N>ş¹ßOÿ›Ïÿ?É£{Û¬õ«^ÈÂÃ†ÛÉuæ®?sxDî½n(+@P!„àzÃĞX‹])±ï‡h‡ŠˆĞ¡íûØ	ªØH‰¸ZGoõ8v×O¡»´FI"%BÀ~„ÿAÇt`}ç…öO]xÚü—øÛæ±WØc;ÿ†Ñë¸Ù·³|ØºG>–‰x¤eÒ
+ÀHI
+
+ğp­A¶Ú !A
+dB¢ëyØ‘ÚR"’?Ä~µ†J?@V`[Ë´·¼†k'Ği."Q>Œˆˆp9¡şQ’é0`=ûìşO=õÔî/_øïíßıªïõ»ãÍ–”@µÁh.[!ƒ™ 3,ÈR@g££	:˜ÙïíZ³Û‚gìµ’s:¶†4#ÖˆkØ°VØó åQWl	…²°»°ŒHJºÖ0èæ"Ìò::\n.`¯Ö@T •‡m!pÀ ·„Ù¿!™Ö“OŞüå×¾?¶ùâ¢¿ùZˆ,›s¡ïıÀ¢²²ÔoBSÂ³ğ•‚’$y¤àIJäƒØXV‚ÉL"‘¥²„ SB–L0nc¸}~Şmìß¾uÇÉ˜®Q¡R!¬€•‚ ğDli‡¾ò`-˜Zm?Äï#©Ô‘­GZoa#¬âF­¨µ„A½…Dy¸E„× ´‰HÿPÀÅÌásÏµ?ñä“7ÿ«¿ş«ÍÇªåí½²ŒršÃšª„g@Í›°iˆ~×Â I¡2@jĞÊBJ€$CÎıá@—ƒP
+_yğ½ ¾ …Á
+d=°ñÁÚƒÉ$²T KiB¹u$Xíh·×3ü¾jÍ°Şû ò°,Aù@€•+% <pX¡g-zB@‡Uèæ"t¥†Îâ
+¶NŸÇKçïÇ×Æ3Já*€ì°r4XÁ‹ºıâoşÊ¾pãkW7'°ùı&Ãi ì"m¾ˆS'[íó¸yY9ÿ”,˜,KÃÏ4˜2XÊ ÊÀ"DÈ,R@dÒ€¤	·	@I)$„P¤à{BßGàğ½ ô …bdñÀh…4&¤±¢ÓX KØĞ¡–nîg‡X§d·;ìÎ'•ÿ
+:(öCØ0Ä ±ˆí3wáÖ}áÅ‡Ş³´†'… ä3Ë‹»ïıÊ_oÿÆŸüÉÆÛ··êÜ¹
+Ò'píÅ´>ÄÉºr¼t÷;‹ìæI\}YÌ¹<zë(Xó÷ 0ãğ=È8 "#…)˜™°L`E#z iABB@B
+"/aøƒ ¡À÷<H@Ø Â† Öw1‘È"‰4vï&°%0S~Ír‚÷CàQ‡ë7dsA@. 	BØJÉwáÖÇ~ùÀ;ğ«õ]şAÁ¥Š·nÆ§¾ıìŞ/}şó×ß±½=ZgP*DÊ€10ÀÃâ®ji™ÙB(ÒË`v‰íá…çünà•oKãÍcK0Âå1Ñğ-¹­a†ò0zG*ö±'¾®æŸ•/;œjA¡¨„È^
+‚ç)T•0@¥å@XU<QDÁ€­Ö
+:ñ c…,QĞ™„5kr0ZfBñ”0ã¢x­ŠG>ã»Ñ6ùös·9hÌ€Î Az¨ìïàÌå‹øûü4µ–]úƒ×.k­úÌ¿»şà÷¾×şÙë×{RëÆ¤°ÖäÁ.;0äà˜2¶F'0¬İQYÕ¬m‹ œø² <Z.r|BU”ûİñåCùz;ĞÕ*!Î¯>sënd	ÁR‹	J0@Œ>bhJò.bÜ	† "‚ ‚”¾ï9 ‚–O91PøT…ä
+È +°ñaÒ &ñaR£Ø
+X-a áx¤ÂyS"£3+‚r&È&Ày0C è´³‰à~ÜÜÀ?oïrXoâÿ”êö²*±¿Ÿ®üóßúÖvEëZ§06óĞM<iS `[›¬ã,—Oş «7s¿ó¬ŞÄ2‡Àâ Ë€à© «‹§plmÛ»UØDBñÄpÅ…2#Æ.®Ø?Ff9ÅTxõ£Ñ]B "–!¹FÎ¯d´|À÷à”/áU	ò¨*|Q€d}­€³Vû°Z‚„5*¯ÀV(rf}Èü®?İ6È  KA_kAˆ_û…ÿmkùO… s»–‹¾óÂşÒÆÆà}ÛÛƒXl­;X\ÆfXœÜXÈü*3>”b ÅıÎJ “ó…ˆÅœ‹ç~ÏS'zM“Èg6Ø‡A‚7³ ˆ›8Ó|v÷NèT‚É€YÃ …Ñ)¬N`	4b¸‹®½Œ˜¯ÓQRÁ£:¤PÁSR
+HEğ=¿âÃWÆ x!ldB°ñÀVº¿Æk·£s! 0™)é€}'WñÏ>ò3¸ÁÌß8j$©  M­×d]¸°{Në$–Éá”ÿxÁš[2ÛÃmÆ¾ÒÁ šKÁ´:”¶“ğ¸‰ +`dyPÀ`hDPÊÃbãUGœôéHğHgúD¤ ¬Šß@«qÍV½¶‚eoDß¨¢ÁÈÿjîÃ²Alw`ÙBÀÊò*Zñ{`“LœÂ"…Fƒ}ÑA‹Ä¼.¤$(%¡„„J)g½A5€¢D¾óm˜Ó„©Y6©œI¿ñåÏà®Õuügøi|7Ï—\×¯êYf>ùÂw¶H›1°ò+››Øiÿiê†ùv¹µ³9<‡VaÎve‰a(‡hÚûQÇÛÀ0ê@M=tüPkÔ¨:’¤¥ŒÕ ÁSC~yx.ˆIË5ZU¢â7Ğ¨­‚ Á”:ª¥èx—ˆ1‰ çÃUÃ[=±^ ,•ÀÈ#9šEÆlê§°¥ŸC¦5d3‚EBÅ¯¢Nw€­SĞ(^¤Z–!ˆÏ ë,ÃdŞ”ÖŞAø/áÇú1<ÎÌŸ;ŠõR ğüóÛáÆFïvT–»bˆ«iÿi†ßUÂ†À_ŠgÜÀ¹ ;êP
+@°AAÁo"LáÕ»`#IúH³B
+X6‚ÇVrò8Š‘HR¹5ç2°‚ÕHRˆ£L+È}È A
+	‚
+êÕeÃÊ×“`R÷Š\¤K`˜™Î¹'}_9‰Uó^¤&g°œÁ$)lš¢ÛZËø- Ù[5%"iº±SÆÇÂs¹ÑÁàbfüöo¿èu:ÉYc&5¶^#ÿi–%Åıq¾¦‡›,”İhf·ß!Ä³ˆƒœû‰ã“$á‰İdiƒÙ€\rÂç*‚¬04¡ÀCwÅ;:3¾1¨õziu¨Eò¤(:A¹§Z&AFDP¢.#+`Ëèö:¨ùÉ(˜¢&J–4€ ËÙÔÍõd€fuÕ°…
+ºëç¥2>©áõÔ@ûjÇ¯B„!l¿™ûdc v÷P{ş›xìÑÇ= ?j´(Œ±Ş$° Ä(EneÈ˜ãgÍ‹c|ÒÃœRÍÕÕBÀº\£Õ
+lÌ'²:Ï3¦ñ ÈR	d:cDƒ)Å°–aŒ…ö€ès|®«kıÔÏİÿY¯qâ/úı´’föÎë×âŸüÆ×;ç¯_K$hC†åDvØÎ¹ÄU1!PMØ`šûH’¾K‹Uœåâø/b… ª£™JP2@£ºŠĞo"Šbˆf4Ô)nM‡Ønï`¥ºŠêSY‹AtıîúşwğAf~á0¤š¸×%`1ça,/ri8+ú&<’¦£<Jòèûšû¸ã}Öèñ5ÌkPB@)„¯ +ÁLRB	|4Tvÿ®~ß+È£ãŒ1`iGA3Ã²-û\sXnbF½%Ì»Şµö‡wÜuüŒáÊ…E½[1º‡4uÀ²Öíßp’f¼Ï©k5~($…`$YZ§È2	’i>¬ŠÒõp¹¨q<DÁ2òBÕ„ÉR03tU”:r†DˆAàf;÷e‰5èwiùÒEÜÿ" 
+.¥„°–§€5¼]ybf>­0sáÂQîĞ@A†£Ú;=ìíßÈ@9’Rı@
+Ï“ğ=…ãk«8·²zÙƒeãñuçÈ°Ö@H;óiôMÆ`çÜd[[ÉúõëıO>õÔ­»66veC`YGDš¾tNó0Q0ûØ ÖmSh›‚ÙÂ‹ŒùÁĞ\lÕ±~ò2`sk€n‡pjé,äŞÃ°©f²@´L¬“$HW`)ÊÓnå‡ Ä}V{[8ÆLÇ \:\äyBãLTXî	'ÁtDîcäÆÎú9ÛòTJƒÁ–a0ÛâRDÂC-ÌÀu;Ö³†ÅÒ“‘Z.kÖZ™—HòÁ´Gš2iS Ğí¦rs³W¿reG¤iX CP¸Î}—âşÆÃ‘ó/]"$·zÆÂŠÈ1‡³Ì¡Õ’À=÷,î?øÄıŸZí½NÛü/iï´M*ˆÛ!´©¸u £BÂm®G¨AÛ¤Ğ`ø4ºmú=Ğî6V­ÁéÃÀ% À÷¥§µ–»q4r®‹CÇĞJqa™s²u8şz×ŸØv<¤Î—Pò%)(™ˆ¢hi>>0çù½‚å²È‡E[ RP>ÖÂr–²„‡ 1&âëÌº¬áuĞÆŒ†ÅYûãáƒÅ ±XæÇÆĞÚºD<ñìcÊßV×BıwşÖã?ş¶7u¯k§}Ì…w…k‰}•Î9gò%jH³ä¥åÛ‘o“&À ‹úŞ6äĞÒÔLÅ$3ŒÒÜò˜ÇçÜ2”,×AT†Uğô:šâ—*¡:W@¸¿$ )<@Qµ”K›äÒf²yZhhí,3Œµ eKÔÂ<²7MI‚& ªV•–’º¾O%`¯–Ö¤L1ÒÜDµ³b
+Dªä§ÖÂŒœ‡YÃ£6Œ½mnnß´ÿäÙowå—şlïäKKêJ»ßfº­D¹â*’$CÃK`Ø:*ªèÏ2ÃZZŞxÕYğC‡Å •$1SÀrï©”W<(ÏçşÛ)3IEL‚
+xz-Ÿ'rÑ'hø íä^æ¦Äå¶WRkÄ•Ñ¥â,Œµ$í81€˜&„Aß Q«)ãy˜3eD G&|&Í1âÒ„»î|H³§ç*"ˆÖ _°şŞ6î¢ímİ)ZúÄÙØâ`*CÊÓ€`ØL‚­„¢*º±\Œgÿ¶tÆ+7®â3†Äø\•8ÖSÀÂ]kxêÉ™}yä"wè#ÇÎ=å¹/1JQYæß|;ûİò~æàò„vXÌc„pÛƒÓTIÂ´}‹×ŒÁ€T)!)§`Ê£C¡ôˆN˜Gs½—³Ì3Ìˆ“?ÁÂNølÅ` ê1®¾BP +x¨‚"@“˜M7.©E‚ApT¿@ä!ÛO0è·Á^ßië˜J c"DÈİMÔ %dÖ°èy¢>d‹!¥„µ€13òŠ3@ç¼ZæQ´x¨åš™,æ‰T	¾JÇF)K0—Í§° Îz;Úv®â@4 }æ_'ï”_©5dºwim¥wÅ eáÔ´–SXÒ™“ye_pÖ¾s_ÇeÅèÚGq‚•Šv÷Öœ‹eË±"ÍçÆ&>³†°¹µ[×¿&O†Ü}İQ²	V¯ßíïb	 e Z.¥Dc0È&œcW&K0ºìN_œ	G:?{„d÷AËG–æL‰g[ ç4—ƒ cí(Ï6Ò«ÍúÙ0ÿF¦.>¯Ï+%
+ir
+õRÔ‘ûªûÀNGÀ18í[8§c+Å)DCO¤€wMè@•²¨ä>8§u`‘qD\P˜·ïîƒzû¸#ËpæPp	A#Ë5òI˜¡¤SQÍ‡û\CU¬;–ÜrÍå9Â¢ƒ~DıWY½À("mhñPpèÇtÄPJÍ#AG±ïÅ¤åµ–0èsiˆ.I¸9Î`ìøx
+j†	ìaº…ÙÂËf§€
+²)
+ƒ!¼TÁÌğl€@5`ç×Ç]‡8 ô2°ö¦ˆ×,¢jÛ×Ñ8Ô¡^/£"°rru®C}®‚¿1ÌÆÛdÎs#–Y	î 8}¿bQmh(ÈŒ™ S[Ö0ÄìŠ>J¡úíªg'"Óy¾ß¼hMÀwjŠaºJ[@FÃlíÑ¬Òë0H%W™‚X„èt µ‚±bd›˜ı8B=H¡£êÁÌĞ+—¾Ïkœ[úC-WX†TùMÑGğ¹Fª•™qŠ8D‡$¢çzæP
+@ÖöQ¹ã:üŠÎk$˜L¡ıÊ¸gÖ`¶°È•E9õíçsnêÑ]€HåCãØr±Œs"Umè›"hËë$Y„Ë›Ï#hÔC(
+ĞOÍº ,w'ıj!J£	a}ó:ŸÎ%v.¸ˆPF‹#0 ¥ [Œ†Å™~PIAÀcUEŠ(FrG•.ÏÒtæwgk§ïw¿#;8¶^Ç}÷Ã•1ÚqVJo¹Ü"ƒÙäjÔùRk¾É¸íxy=¦YÖ,³°®è‘¬0SQ;¦$ˆC¬«éw>vZ_ßˆÃgÙ„åIÁ0ˆ3ˆ`0· dĞƒÚßA@®½À4CŸ¯/­-‹™¡”ó1´á)fyŠ¡/0íy&hL¢À2O2ê‡}Ğ¾¸@·Y,.VÌãï;÷ê?ş‡ï|õôÉ¥lxãÆ¼ç¨…‡íw:#qÔãÃAÇ>Ú³\Ãã²ÖÂØÔ3¶ºNîß-{ÊÃİçN>ıwøÊ/ı§ïù“w¼ãäv%TSÀiªÁª;“É3ºûLqŸO0cu®ÏeŒ…µ,ÜÁ”/¼”Î¶º¬˜?$¸›5â¹R 1ø)B£4Z4ÒsYXèü¯Ñ.;ÏLãÀa¢şŒX`}­©ßñcõ§?úá»÷ÇŞ}záOşèµ_&¢¥2°ÜM´lreÄmAÏ9V{ÖoH«o™¤)¼À ‹xLÁĞáŒû¼åVÓ³O¼ÿÎ‹ù4ÿ«+õNà«Fk!üx¯Ÿ•€å*€4õrmŞ´Š¢³Ï4Ğ‰$Æê¼£Ê2­YpQ"ƒ!Ïå*‘µá™ZøÉ‹^.ãÀˆ!’èL^lÀ)!û õm\é–R(Œÿ»²1kóúC–®,Ë°‘Ğ)A«@Ÿ~àÌSïy|á·Îß¹üÙzİ¿WJú%€™Ç	ú¡Û°	”ÈĞ™Çx„ïæK~¦%7¥ıĞğÜhtıqŒf8féçÉ¦”½s–ƒ@Ø³g[Wßv—úJ§“T´±ßk6ü_› ˜a,#ÉzNÕİ“¥„¨æÍ®Ïµ\I¢IkëUã¡CIg«'ÒóV:ô\ĞĞãğ¨Nkukï.%ß“Îë%¤PRBI	)Ü2å¡ ‚Ê•õ“âúé–¾ïŞµ§îyàßzàáæçî½gµ ­õÆé™qTlØ¤Ît¨OG„UÀœ4Æh÷¿˜›,Ki&7MŒYúáğİÄXuşĞ‘†9ÀzitÛÌD°A £••J·µNkxÿ{qA†,‘Sşµkøôµ×øÄ¼ˆQij¼I`Bº¡Ígš89Î·§<a'Ùé¨ËŒ$ÑèèGk¸2lÖ+¡z8çrvê®æS¼=ø­‡ZøüùsËm"bfÃP%ÿLC`qÎs9M×‡E²Ím„ëÛPÒƒck:®t*Zbıönz°<1LN‚.=Ì23QÕç|çÒG,ÛËRĞŞ6B Ï“íÕ•êÍ » /•€•­Ûëc5Lµƒ…Ë@4Àòæ5^vYÊi¿ê÷3J]KóÉmÅÜâ¬/3
+¥®Òl^Nqfúèö^C€/´ªæñÿèÜÆ»Ş~ês'N´şÍù;—¿uşÜr· ÃMj5/¡¡æ±à[kAÎ°\3@ÆÖbko¯ôŸ	äU×ã<"WÌ*,´ê8½ş´·WaSÌTDŒPÊ¥7cp¥©†ô'*×o›æà"ù)öwìZã? ¯¯¬Ôº¾/{ÌX*Ëá ßá-E`4G:²¢İk³ì¶© œ1ª~?C›JX¹ÊsU–g;u“ Ëmˆ„Ëı`¹fêÔyX1|4pË‹UóáŞõİ}äß8{féÏÏ]Üm5+é„™NjU/ñ[#ËæQ™š(Ò8¨|.MûÑ`¦…•¸‘@”F8½$Ã
+”‹¢@¤<ÙÃ†ìÃ@–DL—èÎ¯ı…ş§ç_ç¤ùx…kÈ½ƒƒ’¦/Š3ÀÌÍ²ìï01óİÌ8à•)põºÅ‘®Bi.D|Ã›=#Rœ	²!ûM<Ö©$ÓE¹nÓxµš¡ıØGï¹øÓŸ|ğ¿¿ëüò¿;sfi0‡-N+U•ÊÀ*ªQ‡…±‡¶`@°‡yO í&#©”mFÌğKDjš:–HÌo§ŠİhàòEÛøßL?Ş\¤&±6oÜå¯Ëã¸e¿…¶y­¤éË2#»%Azdû» ^+I„™N½êRŠc]SÚé‘–ëp¶rMö6òb(W"öjÔ}şä'îõïÿÂc¿ræôâŸ?ŞL(ÔÔ•PéÜÿŸc!ıã¤Î"?Õƒü. ì•Ê®¦Õ²®¸„ ¦s¬³öë¢á±2Â±ôÑ8ÿhI2:I@×¯ppó*wkjP¨æ~£8Z¤¦!-Œ¥VOœWTÅ·®]¶µÙàêeÇºÎ¹?Q&mæuR™ú<NyìsEşQ«	<ú“ñÉƒÍ~eı~Z1Æ
+$AšE)Àû¿óµŸşôCÿõı÷­èĞæ&¬(ãîO¡Ükd¹rMÍï"+Gë<`	R° e aÁ,ÉSÂ‹\Î/›8NóÁùÙÃr·Eß–CåøU"„€„átLÀZF?êÁ2˜ÌŸ>n&Ä1Î\ºÈ«³"F5ˆ2Šİ,Z,.£RÅ¥I4JÛı2ŒçæÉæSgBûóÿàØ—?ô©G¥R‘{ | ’Jk[‰ãÌïtãj§7ÒÔgÏ,=Õj…8¹€i…à°†ÖÕ°ÍzÌoHRXB!ôhÊ`Œ©aÇÀ’ &dÚµì”Êi¿Å¨sx¢4…RqhşUxÒ3.€NÕ’€ ¨šËÉ0êqòš~Ç+IÏŸòŸaQ×·oòÊ¬ˆQÅq†45QÉ~A®[.ÎÀÁ•£a±P¥=ÏrÍ’ jM>†òy"ŠñÆ¾l*+•€5Š­yvÌ'”ÀúzÍ>øĞùvŠn{{«_»|y¡ÓÎ<K¸Ë¤:ôxJÍ9;¸ñœÜ™Çé˜~€°j0h«³ †llÂ[¹
+ée vÛ“{  êIDAT– (´Âã¸úíS(:³†û–Ğ”g‘R–˜§èõ#xk1Õ™Q~gŸ)M°”çKJTšZÊ2SãÒ=ªÛ«7±ZE—v,Á)$¼áÉtÆ:K¹Oƒ7á%¥Ø—Òé½‹š÷a´X´jóZ€¾"¼÷‰•î?ù§şÒ7_øÆ7®¼ûşäÅ_ú«/_=—Äv,çÏ9-¼ôl‰¢™çt;`zyQ…“uûZU{xêÍÍ6®]{)öFn>øcï‚T' ³ƒ‡å€–±æ-ŒIfX¤ÜÃnòE æÅ™"ÑMKlÅÖ`a\BZs0	,fÎå·Tªúš,5*—dÙBn±œĞæ¥[Åux†oÿF½rG~CJ2E`9*Âéè]yO¸<•,&4Z²südíOl=ùÀıÇ?w÷]ë/·•°†g•f”gËÛœ$´«!P(fKzıAÅœœÎï™@‚tç¤]X§×‡_ÑGHlÄ
+‚=×f‰*D6S`ÙM“	ûöSšğé^—›Sªß—d­V±£àh“!/ƒÉ',(‚r&Ÿı TÄí¼‚@ö”’<Ö-Ùq¿k]Ø0GíP| ¬eú–Ø‚ˆR‰=ñFxÀr»qàšS·9U»9&R‡é˜(Ê =EÀ:§Ü‰	
+‚º½AÍQ1ù@	À„H¹ç¾*­¨•«¯pu*Z¬V•´v°†f<OgTçN‹\èëU %Ms$“}
+rsü¦MñP©x=ß—\ÖH,h5ˆÌ¨ˆt^ÖaÖ¡×f$±“0Ôk¾{œ ”ªbf¡SÃ\1¿ˆ¼DÍ@ø1˜›‡Š+%ùPæIH;İî<#êaıÃt&a´˜`)Å5DIÊ7H#1}ZF4à;¯½f—&#FU«ùÊ;Xy)O·Ÿœù×Ì¶$,w³ø­2½ñ¦ ¬ZU}Ï<©é–Ï3,„`Ç¹ „°èuŒˆúì»ız&Ub
+XÌŒ8N¡LAÒ2_¹à(?»"Y¦A*šREÌRcò!ázªº{ ±½¿‡íõÔ}	G:ø„É	´o4sŸzZƒ Ğ@°……P#¨)5 ô»¼ÜŞãÅÉˆQÕë—ef
+X<êjC…Ö43¸®Èœ¥2FÃpŠåc÷¿ƒ¥Tòr]½Œu¥MV»ß¸ãNeWT2O2ûúÁåE7$QËÅ¿®ßŒôa)M™¨ÏbĞ³Ug•m4S©xSÀrõ‡¤§gZÅi+ä×ÄÈ±NSVñT¦Ùl½„Bîû!…á~Œg/>ã
+o‰@$°¶´„3­ B6`ôÁ‚…zƒ+XkdÀN03Zİİ²`Ç&#F†*H3]¸0â&î‰^Ly0hãêBZ(/¼q¾ĞÍ²ášÇ*á’»J*œ<±hxâì•;îTÏÌÊ®¿A–+ñ”`ğtU¹±.A\o9•ÛiztT¤,?„'p5Ÿ2õ<±ëû"bæJXœ+= ³¼OĞÁÂC©E–Ş©B2†]Û1'’eH„î!çlíÎ p&Š<¬WúÊBg4¿TÕÑRÈÕŒúÌhuóºBâ>cĞœ —KúùX4ä¹ì„
+óï[hh°µc¯İ”…š½Ñ!”Ïl! ¤ÀéS‹ö‰Ÿ|ûK¾ÓÿÍµãê›oÖŒ«•ĞË<Oò°“ÌXºq‘ØÀ‰‡’üI#òùáâfZ5ä'>Të4èåüÔc€7¥] •"°˜i–Â¯%X=­a2rí‘¬ëj3œÁ•'– ŒQÚGœFkŒ¨?"&f¶æAR·¦4˜”+7¡I |‹$’–£)T¥ÈÁ\"¸³ÇH"^ïìqXrè}_Ö¢(›°X¡sëØçCšèç,»;)×õÅ$öPEÃúz“?ò¡·½òè£'~uy%ü¬Èş›åĞûÔ~0öe[,ƒÛ»1¾úÌóğ=5T‰M(ûœ0±Ñ¨àïıÇî>öã§ş—zS|}”Z
+Uß÷EJ„<W™ó\¬Ñ‹R¼ğê·V›PR9k-¼\ä¨ I‚„‚€›èàÊÆ6øF6<êB½¹·‰;ºx ÁVVÀ	6NkóI´ftw3°6SªZ,Ä:3È8B½¦÷eO*8½ãÜdØx0ÔÄì–ZıŸ¸òŠ)EŒÊóD­?p5‹EqŸÓÏ»Lú¬Hq
+d=‘Ï1e÷œ³V$>ı‰G’_üïşÆw,|×ó˜9@a‚ÊÃÈ‰Û±rR
+ö}9–¶‰k:«-öÛÙÛ‡¡‡ıäùîû?pÇ¯-­Êé4|lµê§¾/u±’Ûæ}çu¦ñâÅËÒuk&P>=•f¤$|˜T Ít¡½yŠç.¼Š—«· É)qeA•+…“ƒ!ÀØÅ.4Gsâ4Æ^¼¥“!CGŞb<ŸÑ8SJè´3¤WˆuÊ³Èb1£é÷ñàÍ+åˆQI)ı^:ÁïäÅ èÉâŒ@XA8wæ$–ñ®^¨Ãš‰§!Ÿ½ÌaçÂbğ7ŸåŸyéX÷½iÌßñx>iÏF)2R‚…÷Á$xÁó	~@ö¥âMñËRÑÀóiàyˆ½€ß‰ç“ö<ÒÊƒ:ûÙ§²AH[B‚`$Í.0>ã*l0”Gø©ßü‹ïşÍ3w,şkkõ¢´‡<OH¥„6%ËÂ‘—if€lF·e¸:…å¥ˆ=´w3WÀ[ –…A 1ˆÒR 6ì¶HBx ÂŠBšjhm§€e ‘é/_¾ŒK×6F–zVˆ.…‚ä 6O`‡¡FûSbEf`gË†í=ª#F%%5zıt¢fÑ´³\<­şœ2!ô›8sâN4Í:n\00C¾ŒÊ¶Èöo~QÓS_¾U#Â9fœ¥b!ÏÔl\’€ïÂP ¬û!qöÁ~@ğ°ç	( ±¹& ³g¼‹_»S-Îä´
+»É¤F3¢1x¸“·Œ4`„BàlıLwåñ«/‰µ«/EøÆ—‚yê+1ío,<Ú¾|r­¡%4§ù¼A\ËîïØ2y	áôÉ~ê÷ag+ÅşìUô{	ònĞ ˆá¬mC•ïîÉÛ	[oà~î1|à'î‚q¢1d¸ğâüÎï=ÍÈe‘ÁR
+†…6®Aİ¼—€„`8R½¨‡fÅ ¿?›¯Û¹e©RSg‹ªT%5»¤¬|ØM<Wb\1<Â«,ÃÚõÅgïqı³¬sZmî¼Z¶•ÈÛu»Ú‡a{¯±"6ïfS¨"ÒšÑíZt;Å˜‚¦ll/‹)[H¡
+ŸyeÿŠçÌÅ= >ó{Àş`óƒBàƒÃo¥ ¤ç\‡8ZAÓ®L¨KiÖ°pWàÅ?÷4–£óX’Ã©ÿÌÜEPZ¸©^,»ÉPß¶ÒÂ}ÇÏáX«éj/s™tKÃÓÇë¸°»cu>ãF„”»è›‚àS`š#dÜõ²wÀòGòczQµ³¤±Ht"ÆjÔıÚ%Ka•Şm4şß¸ˆ¨Ñïg%`+b4,¨c/\Çş ‹‹—v îocñ!7á|‚óœîIæÆxè‹ˆ\n2|O¹xÏ1Êl	Öº÷Cº¨køF‘ßèÑ÷zXIù:Ãâİœ³cNnä0
+ÓÓPé;×Ò= ~…
+j†2}á€&
+ø£Î¤ÀÍ«‚'ƒRúîLŠ…ÉÛw^%üîÿ¬ñûá„p³Å’p5û;ç±&Ï»ÔVğ¾¹…kâKX]mà¸÷.¶–°§/â¦ş»ï¦ ) kÈîwÚØ‹6ÀÂG¥• PØ»²ä®!:û=[ßÙ´£ù]jƒ(-yã7!Î—3i¡í }=Â•ë›£§ÓM•K£ƒD…9Gîxİ¡“+„›rÎ]0÷W
+Ç“	) „û+…›–NäßÖR‰õ!H@H§oW$Ü>I€Hæ£ÌÇ=ÃÿıOÈÄC½TşŸ©Ëp‹|®ÅhÃ9-MüÅHŞd-) !SÏäª‡J9Û¡bÅıM4
+Ëî½_¥By›{o‡¦YÃêR+• Û‰8©¢–5!2£¹”#eXHR¡Dı^VøÕBY#İu–ĞïğÛ®¼l«C§^ğ³Ì–€e­E’‹ÔjuÂ‘ŠsFO¶(R\nAş£úšxñ¡p“™g.s–FÛŒ¿wß1z†à–ä÷Ş}FBŒÖ³è…÷¹ewpÄğ	€œı 0å}äˆİş(bàc{ÿêUÚéh`Qí=ˆ^Çb»w	]s=÷-?Àjã{i?D°´fÍj4óÈ0ÿÚíğƒÛ·lkHÀ)c¬(VşXk¡M†ı¶†•}´VrÖÚÅ5(Û‚ƒ)ãGX“Á´Ã7å(ZşñßÂ{Áï€ND‚ĞlVĞ¨- ßUØì@éË)šõ,4×QÙxÄ^ôi–5¤ô°º|{7¾sıÍ¼•Ë İ ilÊ)À[×N¡ÚAim%&€eL†~ß¢3hc¥"¢ÁáK˜BsZìç ûÛ¬7©oÚ0Ş=ËK5__EÜ÷°³{RğÈÃ'ğ¾w=ˆ½›-\¿èDå
+|	‚ Š–x "Ö!¼Â'DZƒ#1"Uo]3ÔZôïbÆ× •$®ÚÚòX–]ê`g¯ƒåõÕzÑàğ|²`av
+1"ï´è•Äƒoë‡=ÔK‹UÜw÷diˆ«× 1À#œÀû >ï]që5	¶@U¬!ğjN6-=È®ÄÖ%À¤;Mx•µ…a0h{£œéõ+–¤‡Ò” ±Šcí[¶psZ [Û]Ü{*Bs±‰Í£²uÔ²·Aq±¼	#»yÃıbEöXS,à)MXA¸3.,­;?~=JŒ{”µùo)°šUÜ÷¶óÙ®¿¶‡Ğ¬ã¾{Oá½ï:‰Á^×/ÅèµCd±‚ç3¼Ğ‚R…JĞåAÉFäµ¨DĞq€¤‚ĞE}9Æò)4ò0h{èî½6ß¼î"F²ĞÌ 3cow öúh.2„Äˆm?ä´ m•ì|½ÄPRÑr!E2ê¬œë¿JÕĞ(ÎèaÇ\±kÔFÀxêPíß{\Ò‚?‹ùì¸‹zSø;^ÓbZğ=½néÍµÉïËŸ•¶gÏ˜ö(„"¡×BU.ãäÒ‚Ş)ìÜ$Ô¢¨„œ]l_à¹¿–èw	œ8yUö±r‚±w£`q–°u¥R­37‘î­ÂŠ>*U…+-D]/¯lê£º ‘%MÄ=í]{ÿÆ+&`f¨8É<=X c¥Ønoãô™SXxEawëèjbÅMˆ¤	¡g<axÎ…dŒæ*M8êş]ŞóŸ:Ëâq^)ŠË7Ÿ¦×uÑ?,Cñ·ÆMïF ¡qJ¬0³{ÉfO‹§€7µ>÷ïù–g‹«øX‚²Èv{[ÈVÂºE¿—áúeFw«‚$u¼C	ÄqŠ`ùƒDN£½®F£µ‡½Î>D²#‹|¤± ‘Ap¶¿š€-¡³oîjïSu¨ŠÈÂŠ@ KÀZ–.\Á=Ÿ<{9‰g¾b‘Ä·gú#?mİZ¦YQÏy^i\oDÇÜ_™Õ…ù(ëôCD˜’ÍÛ_qt„Ë@sÎ³ìo8ü H­œ&Ì’^CÁˆÄHObw½}ÏÊf,A÷¢ßëÁÈ.›+™È-¨„ëØJ7±´XƒéUA’-@ìì¡Ûî!hŞDmÀŞ™`åxs	Àkby¹òôù»–§T”Ã©Qnmuğ—_{w¾½ƒó÷{ŠŞtaJÁ<£¤¸Àó+Œfm7¯eæaë~ó)í(e•“ ÃzÍÂgCruD¬r°"ÏûIWghóî‚¬\oxv@!xœÿ‡â Ä>‡£ÿÒ†\Ï‰
+Gé³\Je$–[h_¯c÷jˆ4™˜4+K¡j](³Šıİã»yb‹;hµªèmWAõkh,e¥ë›ì·Ğ»~ı›khï2­¬Ëw2CªLÛ¿~äáãüüs×ó4¡Ï¹Wzuá¥ëXY~ïıàû°¿#qãŠş¡ù®GQc”uetôí&Ä‡ÖeÎ™Cç ÎóöõƒLúP–DÓÜ6ì³*²=j¡Z“0‰pt)7å³Í…‹¬Cô®Øƒµ—ûÃ™Sf÷4º=‰,%¤ı*$«Q$×ËYÁ$
+©6.G0†ïÎR–boopé±Ç¿:ê£P ÖP†¢µÁß|ıûxuë|èï*¬S ÂõutKvHÜêĞÚÊYÍm‹ Ã!%tGhŠ{Øòäï©Y±E^¨0ÅÒù+8ûŞ—pö±Ôš®	‹I}ØŒ £÷\¯f€u€4òÀFÁD•‘Õ«,ôqìMœydõ¥F=ƒM»zsÃZ\¨$ëkg=OœOR3¬á%LRûGOãÓŸÔø…ÿâ=øË?Txñ¹YjßÔzÃ×mÉ°8‡Y²ÉÏf­{Ød¥u&­¦{èµ‰nÉbÎ³Œ…Â2’4‚òÑ E´1ÀÎ~Œ•¥‚Z½¶‡Åc)Ë©k'e‹Ïc1aOˆ;Ú›>zqı+ë/”²	‚‡A×>±·“ùêî»WM–™‹÷İ·ŠgŸÛ˜	¬Ñ”‰ÆÿıoŸÁw.\Ç?úùÇqîŞ5|ıÉ»[:ã*ÍózAvà¼! Ãº*b¢[àŒïšõlªÏ*¦;èCˆ#‹jƒ‘í+¬­® ¨'HS¡4 ‰k»Ñë=#¢rª© -/¶pÇ‰·cĞ9ÔQmÔ @z;7-ºıìÔÊqÈ_ûµfŸ~fc7ŠÒøì·¯zŒÙÀ*¾¶¶zøê7/âÜıïûÀ*`ö\)*Gv?D°ÑIÊ¼ ì(ÑááQãÁëeÛYÇL‡|?+"¥#3	¯±‡F­4Õê	„°ĞÆ ğ%t&0ÈÚØno¢ßË0èQô€A1è2ú]†Nš•´ mU‹$±¨6`$â4ÁİyxğÑÚ¿V øÑGO\øÏüÒKŸ~åµ-¬!fúƒÿê÷¿‰ów¾†<qÎ<º¨bç†ÄŞ-d ‘IdÏ¢²nä7K1Okóæ[ªÉÍf„çQ#„Bk©wv4¯pñÆpbŞİˆ¸tÅDõÄ\±:¢| åÉ®Ê¿a¡½,Şµ…©¡3F5ÑTNîaõ®>j‘BğÚûFjâJù6¥%LWbáØ6Ä ƒ6dı*L³‡ÖÉ=	6^«RX?A‹²Şw/Üü‰?şÓ~ãÿ_yøÆ¬É[,!NoáÜ™U[]D=X„Mªˆº
+qŸÆ5wù­a.ªT¼á<lLí0®«ä‰ï„0¯´NÉ²R™Ö˜ğ‰&>ãmJ`¥Ù­ÂGú*.š§Èº™À×éNÏ'9>šiË‹p•B!‹…{Ø'Ïa#¡“sÉ¸÷=ö¯×Ğİõ&|	+vo€t¬]¥±Ê#,/‡øßşxõŸ+‘e™ùÊµkûÿİG?|ï¯ıég¾sÿînÿHÀràdDQ†W^İÆ+¯nCæ`«×,¶ª|T±•‹BÊÇL<M4oX¡â“\f'IÏ©ácúÇg34“(Uzv ı9ÃQœœ¹ÛÑŸÍ²æåR‚W	Ñà%,˜âEU¤}:UH²èì Û¨Å)¤Ë­ˆ$¤’€®¢×÷%"o%KÆ5°»ÜºfVÔğ <OÆÛÛ½'Ûød–™ÿöş½Õí>ñDRù(É[cƒAŠÁ Åæfo½şı¿<O¢Ù¨`uy`¡± Tá‹êh‚“:Ò”¦1zÔókj”"i+6@µ™!¨M?õºÀ¤Š./×:O<~ş=OÔƒ@ıìÓÏ\}ô{/İ’q¢¬·^?š¯,3ØÙíag·"@
+åI4U,/5ĞĞ¨¯IàfL)ù˜…Q
+	â¬ÃW\S;U¶˜õF€'>şÀÍõSôÇj2‡ÇÌW?ò¡{ÿ×Å…ê·ï8½ø÷¾úõ×>öíç6Nlm÷h8³Ù[ÀúÛır…%™¶ˆ¢66·:â:šÊSŞK`´E’êÑLÀÃW£àÓ?şğŞmÃ«&ŸU˜•$:ÌüçË+õï>½ø­‡<ñóß½pãÏ¿p­¾»;@’j”€ö°şV¬ ÃØÛüÀûk4B|ì£÷]ÿè‡ïùŸÎYúãÇš½C“8Z›Æ×¿yé®W^İ~ßŞŞà±4Õ_¿Ñy`ãÚ¾wáÅ›rãêEqŠ­ÚÀ–Î\]©¼>!è‚Ü?…ÕsZÇ‹€õ'¼czCò6Vç`½¯F#ÄÏ|úáŸøÉ~ıá‡Nü«ûî=¶GDGëä—‹ûêÆØ…ËWö–~æêÒ­­nãäñÖ§vw£:€‡IğİlsuÑD™Ú8ò÷7Ÿlğ[Jû¹e.¶PMÒÉ)eæûÕ”*%"+¥—)ÄRú™Â€iœmc†Î2•¦q$qÅX-Ñ*I¢j–&c¬˜†-,‡ÇmÀác­-ÑC½X©å
+¢fm+õ³zµÑ|D…)r†>39by²RærGfÆµëmºti‡vv®¡İ½)ÀúÔÃ7>ññ~ı¡Oü_÷ßwlwØÃƒnõ£í„µXéõ2¹µİm¢¸j]ôK¥;.èÁ:¼v.”†3¡)Ïãz­i|?°DÊóY
+Å”ŸÕ¨ò½p1­µEÊtFYšR¿ß•ƒA$ŒÑyDÌd-‹bİ9Œø¾äìÕÏ¥°=ïÂE<ÁÆÚáÔîĞÜ£a·Lã{#GyşĞq’ãÍF¤3Ê__o¾;MõÇ®\İ}dk«Wù‹/¾$:—.í"Nœ+#¥«ÿ–¾W½à§?õÈÍOòÁ_àşã¿7´XoØ°ğ#VÙCøÑ~Ñ›µfPššğÆÍvıû/oVÁh®­5~ÎZn\¼xë'¯ßìœÿìç¿‹—.nÒövq¬â…¨×ˆ9ò—•Õ:>ş±ûo}è÷ü÷İ»ş/ßv×j{²ëĞúÍxëõ>ìÌLÌğ±ôÌ³WÕƒ@¾owgğÓívTç±U¤I½>hÔ‚ş™;–n¸bàiü)OÏ“Ùï§~ÿ}ÇâYó.ıØìdS”˜ì    IEND®B`‚a:11:{s:4:"name";s:7:"Automap";s:7:"summary";s:32:"Automap Runtime and Creator tool";s:7:"version";s:3:"1.1";s:7:"release";s:1:"0";s:7:"license";s:72:"Apache License, Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0>";s:9:"copyright";s:16:"(c) F. Laupretre";s:6:"author";s:37:"F. Laupretre <mailto:phk@tekwire.net>";s:3:"url";s:26:"http://automap.tekwire.net";s:8:"packager";s:37:"F. Laupretre <mailto:phk@tekwire.net>";s:14:"cli_run_script";s:28:"/scripts/Automap_Builder.php";s:14:"license_prefix";s:12:"/etc/license";}a:7:{s:15:"build_timestamp";i:1200700830;s:11:"map_defined";b:1;s:19:"PHK_Creator_version";s:5:"1.4.0";s:15:"PHK_min_version";s:5:"1.4.0";s:23:"Automap_creator_version";s:5:"1.1.0";s:19:"Automap_min_version";s:5:"1.1.0";s:15:"PHK_PSF_version";s:5:"0.1.3";}<?php
+//=============================================================================
+//
+// Copyright Francois Laupretre <automap@tekwire.net>
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+//=============================================================================
+/**
+* The Automap runtime code
+*
+* @copyright Francois Laupretre <automap@tekwire.net>
+* @license http://www.apache.org/licenses/LICENSE-2.0 Apache License, V 2.0
+* @category Automap
+* @package Automap
+*/
+//===========================================================================
+
+if (!class_exists('Automap',false)) 
+{
+//------------------------------------------
+/**
+* Automap runtime class
+*
+* This class allows to autoload PHP scripts and extensions by extension,
+* constant, class, or function name.
+*
+* @package Automap
+*/
+
+class Automap
+{
+const VERSION='1.1.0';
+
+const MAGIC="AUTOMAP  M\024\x8\6\3";// Magic value for map files (offset 0)
+
+//---------
+
+const T_FUNCTION='F';
+const T_CONSTANT='C';
+const T_CLASS='L';
+const T_EXTENSION='E';
+
+const F_SCRIPT='S';
+const F_EXTENSION='X';
+const F_PACKAGE='P';
+
+private static $type_strings=array(
+	self::T_FUNCTION	=> 'function',
+	self::T_CONSTANT	=> 'constant',
+	self::T_CLASS		=> 'class',
+	self::T_EXTENSION	=> 'extension',
+	self::F_SCRIPT		=> 'script',
+	self::F_EXTENSION	=> 'extension file',
+	self::F_PACKAGE		=> 'package'
+	);
+
+private static $failure_handlers=array();
+
+private static $success_handlers=array();
+
+private static $support_constant_autoload; // whether the engine is able to
+private static $support_function_autoload; // autoload functions/constants
+
+//-- Load flags
+
+// Reserved for future use
+
+//---------
+
+private static $automaps;	// Key=mnt ; Value=Automap instance
+
+private static $mount_order; // Key=numeric(load order) ; Value=instance
+
+//============ Utilities (please keep in sync with PHK_Util) ============
+
+private static function is_web()
+{
+return (php_sapi_name()!='cli');
+}
+
+//---------------------------------
+/**
+* Computes a string uniquely identifying a given path on this host.
+*
+* Mount point unicity is based on a combination of device+inode+mtime.
+*
+* On systems which don't supply a valid inode number (eg Windows), we
+* maintain a fake inode table, whose unicity is based on the path filtered
+* through realpath(). It is not perfect because I am not sure that realpath
+* really returns a unique 'canonical' path, but this is best solution I
+* have found so far.
+*
+* @param string $path The path to be mounted
+* @return string the computed mount point
+* @throws Exception
+*/
+
+private static $simul_inode_array=array();
+private static $simul_inode_index=1;
+
+private static function path_unique_id($prefix,$path,&$mtime)
+{
+if (($s=stat($path))===false) throw new Exception("$path: File not found");
+
+$dev=$s[0];
+$inode=$s[1];
+$mtime=$s[9];
+
+if ($inode==0) // This system does not support inodes
+	{
+	$rpath=realpath($path);
+	if ($rpath === false) throw new Exception("$path: Cannot compute realpath");
+
+	if (isset(self::$simul_inode_array[$rpath]))
+		$inode=self::$simul_inode_array[$rpath];
+	else
+		{ // Create a new slot
+		$inode=self::$simul_inode_index++;	
+		self::$simul_inode_array[$rpath]=$inode;
+		}
+	}
+
+return sprintf('%s_%X_%X_%X',$prefix,$dev,$inode,$mtime);
+}
+
+//================== Map manager (static methods) =======================
+
+public static function init()	// Unpublished - Internal use only
+{
+self::$automaps=array();
+self::$mount_order=array();
+
+// Determines if function/constant autoloading is supported
+
+$f=new ReflectionFunction('function_exists');
+self::$support_function_autoload=($f->getNumberOfParameters()==2);
+
+$f=new ReflectionFunction('defined');
+self::$support_constant_autoload=($f->getNumberOfParameters()==2);
+}
+
+//-------- User handlers -----------
+
+public static function register_failure_handler($callable)
+{
+self::$failure_handlers[]=$callable;
+}
+
+//--------
+
+public static function register_success_handler($callable)
+{
+self::$success_handlers[]=$callable;
+}
+
+//-------- Key management -----------
+
+// Combines a type and a symbol in a 'key'. The resulting string can be used
+// as a key or a value with the appropriate prefix in an automap.
+
+public static function key($type,$symbol)
+{
+// Extension names are case insensitive
+
+if (($type==self::T_EXTENSION)
+	||($type==self::T_FUNCTION)
+	||($type==self::T_CLASS)) $symbol=strtolower($symbol);
+
+return $type.$symbol;
+}
+
+//---------
+
+public static function get_type_from_key($key)
+{
+if (strlen($key) <= 1) throw new Exception('Invalid key');
+
+return $key{0};
+}
+
+//---------
+// Extracts the symbol from a key. If the key contains
+// a '|' character, ignores everything from this char.
+
+public static function get_symbol_from_key($key)
+{
+if (strlen($key) <= 1) throw new Exception('Invalid key');
+
+return substr($key,1,strcspn($key,'|',1));
+}
+
+//---------
+
+public static function get_type_string($type)
+{
+if (!isset(self::$type_strings[$type]))
+	throw new Exception("$type: Invalid type");
+
+return self::$type_strings[$type];
+}
+
+//---------
+
+public static function string_to_type($string)
+{
+$type=array_search($string,self::$type_strings,true);
+
+if ($type===false) throw new Exception("$type: Invalid type");
+
+return $type;
+}
+
+//-------- Map mounting/unmounting -----------
+
+/**
+* Checks if a mount point is valid (if it corresponds to a currently mounted
+* package)
+*
+* @param string $mnt Mount point to check
+* @return boolean
+*/
+
+public static function is_mounted($mnt)
+{
+return isset(self::$automaps[$mnt]);
+}
+
+//-----
+/**
+* Same as is_mounted but throws an exception is the mount point is invalid.
+*
+* Returns the mount point so that it can be embedded in a call string.
+*
+* @param string $mnt Mount point to check
+* @return string mount point (not modified)
+* @throws Exception if mount point is invalid
+*/
+
+public static function validate($mnt)
+{
+if (!self::is_mounted($mnt)) throw new Exception($mnt.': Invalid mount point');
+
+return $mnt;
+}
+
+//-----
+/**
+* Returns the Automap object corresponding to a given mount point
+*
+* @param string $mnt Mount point
+* @return Automap instance
+* @throws Exception if mount point is invalid
+*/
+
+public static function instance($mnt)
+{
+self::validate($mnt);
+
+return self::$automaps[$mnt];
+}
+
+//-----
+/**
+* Returns the list of the defined mount points.
+*
+* @return array
+*/
+
+public static function mnt_list()
+{
+return array_keys(self::$automaps);
+}
+
+//---------
+/**
+* Given a file path, tries to determine if it is currently mounted. If it is
+* the case, the corresponding mount point is returned. If not, an exception is
+* thrown.
+*
+* @param string $path Path of an automap file
+* @return the corresponding mount point
+* @throws Exception if the file is not currently mounted
+*/
+
+public static function path_to_mnt($path)
+{
+$dummy=null;
+
+$mnt=self::path_unique_id('m',$path,$dummy);
+
+if (self::is_mounted($mnt)) return $mnt;
+
+throw new Exception($path.': path is not mounted');
+}
+
+//---------
+/**
+* Mount an automap and returns the new (or previous, if already loaded)
+* mount point.
+*
+* @param string $path The path of an existing automap file
+* @param string $base_dir The base directory to use as a prefix (with trailing
+*				separator).
+* @param int $flags Or-ed combination of mount flags.
+* @param string $mnt The mount point to use. Reserved for stream wrappers.
+*					 Should be null for plain files.
+* @return string the mount point
+*/
+
+public static function mount($path,$base_dir=null,$mnt=null,$flags=0)
+{
+try
+{
+if (is_null($mnt))
+	{
+	$dummy=null;
+	$mnt=self::path_unique_id('m',$path,$dummy);
+	}
+
+if (self::is_mounted($mnt))
+	{
+	self::instance($mnt)->mnt_count++;
+	return $mnt;
+	}
+
+if (is_null($base_dir))
+	{
+	$base_dir=dirname($path);
+	if (($base_dir!=='/') && ($base_dir!=='\\'))
+		$base_dir .= DIRECTORY_SEPARATOR;
+	}
+
+self::$mount_order[]
+	=self::$automaps[$mnt]=new self($path,$base_dir,$mnt,$flags);
+}
+catch (Exception $e)
+	{
+	if (isset($mnt) && self::is_mounted($mnt)) unset(self::$automaps[$mnt]);
+	throw new Exception($path.': Cannot mount - '.$e->getMessage());
+	}
+
+return $mnt;
+}
+
+//---------------------------------
+/**
+* Umounts a mounted map.
+*
+* We dont use __destruct because :
+*	1. We don't want this to be called on script shutdown
+*	2. Exceptions cannot be caught when sent from a destructor.
+*
+* Accepts to remove a non registered mount point without error
+*
+* @param string $mnt The mount point to umount
+*/
+
+public static function umount($mnt)
+{
+if (self::is_mounted($mnt))
+	{
+	$map=self::instance($mnt);
+	if ((--$map->mnt_count) > 0) return;
+	
+	foreach (self::$mount_order as $order => $obj)
+		{
+		if ($obj===$map) self::$mount_order[$order]=null;
+		}
+	unset(self::$automaps[$mnt]);
+	}
+}
+
+//-------- Symbol resolution -----------
+
+private static function symbol_is_defined($type,$symbol)
+{
+switch($type)
+	{
+	case self::T_CONSTANT:	return (self::$support_constant_autoload ?
+		defined($symbol,false) : defined($symbol));
+
+	case self::T_FUNCTION:	return (self::$support_function_autoload ?
+		function_exists($symbol,false) : function_exists($symbol));
+
+	case self::T_CLASS:		return class_exists($symbol,false)
+								|| interface_exists($symbol,false);
+
+	case self::T_EXTENSION:	return extension_loaded($symbol);
+	}
+}
+
+//---------
+// The autoload handler, the default type is 'class', hoping that future
+// versions of PHP support function and constant autoloading.
+
+public static function autoload_hook($symbol,$type=self::T_CLASS)
+{
+self::get_symbol($type,$symbol,true,false);
+}
+
+//---------
+// resolve a symbol, i.e. load what needs to be loaded for the symbol to be
+// defined. Returns true on success / false if unable to resolve symbol.
+
+private static function get_symbol($type,$symbol,$autoload=false
+	,$exception=false)
+{
+//echo "get_symbol(".self::get_type_string($type).",$symbol)\n";//TRACE
+
+if (!$autoload)
+	{
+	if (self::symbol_is_defined($type,$symbol)) return true;
+	}
+
+$key=self::key($type,$symbol);
+foreach(array_reverse(self::$mount_order) as $map)
+	{
+	if ((!is_null($map)) && $map->resolve_key($key)) return true;
+	}
+
+foreach (self::$failure_handlers as $callable) $callable($key);
+
+if ($exception) throw new Exception('Automap: Unknown '
+	.self::get_type_string($type).': '.$symbol);
+
+return false;
+}
+
+//---------
+
+public static function get_function($symbol)
+	{ return self::get_symbol(self::T_FUNCTION,$symbol,false,false); }
+
+public static function get_constant($symbol)
+	{ return self::get_symbol(self::T_CONSTANT,$symbol,false,false); }
+
+public static function get_class($symbol)
+	{ return self::get_symbol(self::T_CLASS,$symbol,false,false); }
+
+public static function get_extension($symbol)
+	{ return self::get_symbol(self::T_EXTENSION,$symbol,false,false); }
+
+//---------
+
+public static function require_function($symbol)
+	{ return self::get_symbol(self::T_FUNCTION,$symbol,false,true); }
+
+public static function require_constant($symbol)
+	{ return self::get_symbol(self::T_CONSTANT,$symbol,false,true); }
+
+public static function require_class($symbol)
+	{ return self::get_symbol(self::T_CLASS,$symbol,false,true); }
+
+public static function require_extension($symbol)
+	{ return self::get_symbol(self::T_EXTENSION,$symbol,false,true); }
+
+//=============== Instance (one per map) =================================
+// Automap instance
+// Used for plain maps and package-wrapped maps. So, this class must support
+// plain script files and packages.
+// Using a 2-stage creation. __construct creates a simple instance, and
+// realize() really reads the map file.
+
+private $path;
+private $base_dir; // Prefix to combine with table entries (with trailing separator)
+private $mnt;
+private $flags;	 // Load flags;
+private $mnt_count;
+
+private $symbols=null;	// Null until realize()d
+private $options=null;
+private $version;
+private $min_version;
+
+//-----
+// This object must be created from load() or from Automap_Creator.
+// Making __construct() private avoids direct creation from elsewhere.
+// base_dir is used only when resolving symbols.
+// If base_dir is not set, it is taken as the directory where the map file lies
+
+private function __construct($path,$base_dir,$mnt,$flags=0)
+{
+$this->path=$path;
+$this->mnt=$mnt;
+$this->base_dir=$base_dir;
+$this->flags=$flags;
+
+$this->mnt_count=1;
+}
+
+//-----
+
+private function realize()
+{
+if (!is_null($this->symbols)) return;
+
+try
+{
+if (($buf=@file_get_contents($this->path))===false)
+	throw new Exception($this->path.': Cannot read map file');
+
+if (substr($buf,0,14)!=self::MAGIC) throw new Exception('Bad Magic');
+
+$this->min_version=trim(substr($buf,16,12));	// Check min version
+if (version_compare($this->min_version,self::VERSION) > 0)
+	throw new Exception('Cannot understand this automap.'.
+		' Requires at least Automap version '.$this->min_version);
+
+$this->version=trim(substr($buf,30,12));
+
+if (strlen($buf)!=($sz=(int)substr($buf,45,8)))		// Check file size
+	throw new Exception('Invalid file size. Should be '.$sz);
+
+if (($buf=unserialize(substr($buf,53)))===false)
+	throw new Exception('Cannot unserialize data from map file');
+
+if (!is_array($buf))
+	throw new Exception('Map file should contain an array');
+
+if (!array_key_exists('map',$buf))
+	throw new Exception('No symbol table');
+
+if (!array_key_exists('options',$buf))
+	throw new Exception('No options array');
+
+if (!is_array($this->symbols=$buf['map']))
+	throw new Exception('Symbol table should contain an array');
+
+if (!is_array($this->options=$buf['options']))
+	throw new Exception('Options should be an array');
+}
+catch (Exception $e)
+	{
+	$this->symbols=array(); // No retry later
+	throw new Exception($this->path.': Cannot load map - '.$e->getMessage());
+	}
+}
+
+//---
+
+public function path()
+{
+self::validate($this->mnt);
+
+return $this->path;
+}
+
+//---
+
+public function base_dir()
+{
+self::validate($this->mnt);
+
+return $this->base_dir;
+}
+
+//---
+
+public function mnt()
+{
+self::validate($this->mnt);
+
+return $this->mnt;
+}
+
+//---
+
+public function flags()
+{
+self::validate($this->mnt);
+
+return $this->flags;
+}
+
+//---
+
+public function symbols()
+{
+self::validate($this->mnt);
+
+$this->realize();
+return $this->symbols;
+}
+
+//---
+
+public function options()
+{
+self::validate($this->mnt);
+
+$this->realize();
+return $this->options;
+}
+
+//---
+
+public function version()
+{
+self::validate($this->mnt);
+
+$this->realize();
+return $this->version;
+}
+
+//---
+
+public function min_version()
+{
+self::validate($this->mnt);
+
+$this->realize();
+return $this->min_version;
+}
+
+//---
+
+public function option($opt)
+{
+self::validate($this->mnt);
+
+$this->realize();
+
+return (isset($this->options[$opt]) ? $options[$opt] : null);
+}
+
+//---
+
+public function symbol_count()
+{
+self::validate($this->mnt);
+
+return count($this->symbols());
+}
+
+//---
+
+private function call_success_handlers($key,$value)
+{
+foreach (self::$success_handlers as $callable)
+	$callable($key,$this->mnt,$value);
+}
+
+//---
+/**
+* Resolves an Automap symbol.
+*
+* When the symbol is in a package, the search is recursive and the
+* concerned (sub)package(s) are automatically mounted.
+*
+* @param string $key The key we are resolving
+* @return boolean symbol could be resolved (true/false)
+*/
+
+private function resolve_key($key)
+{
+$this->realize();
+if (!isset($this->symbols[$key])) return false;
+
+$value=$this->symbols[$key];
+$fname=self::get_symbol_from_key($value);
+
+switch($ftype=self::get_type_from_key($value))
+	{
+	case self::F_EXTENSION:
+		if (!dl($fname)) return false;
+		$this->call_success_handlers($key,$value);
+		break;
+
+	case self::F_SCRIPT:
+		$file=$this->base_dir.$fname;
+		//echo "Loading script file : $file\n";//TRACE
+		{ require($file); }
+		$this->call_success_handlers($key,$value);
+		break;
+
+	case self::F_PACKAGE:
+		// Remove E_NOTICE messages if the test script is a package - workaround
+		// to PHP bug #39903 ('__COMPILER_HALT_OFFSET__ already defined')
+
+		$file=$this->base_dir.$fname;
+		error_reporting(($errlevel=error_reporting()) & ~E_NOTICE);
+		$mnt=require($file);
+		error_reporting($errlevel);
+		self::instance($mnt)->resolve_key($key);
+		break;
+
+	default:
+		throw new Exception('<'.$ftype.'>: Unknown file type in map');
+	}
+
+return true;
+}
+
+//---------
+// Display the content of a map
+
+public function show($subfile_to_url_function=null)
+{
+self::validate($this->mnt);
+
+$this->realize();
+
+if ($html=self::is_web())
+	{
+	$this->html_show($subfile_to_url_function);
+	return;
+	}
+
+echo "\n* Global information :\n\n";
+echo '	Map version : '.$this->version."\n";
+echo '	Min reader version : '.$this->min_version."\n";
+echo '	Symbol count : '.$this->symbol_count()."\n";
+
+echo "\n* Options :\n\n";
+print_r($this->options);
+
+echo "\n* Symbols :\n\n";
+
+$ktype_len=$kname_len=4;
+$fname_len=10;
+
+foreach($this->symbols as $key => $value)
+	{
+	$ktype=self::get_type_string(self::get_type_from_key($key));
+	$kname=self::get_symbol_from_key($key);
+
+	$ftype=self::get_type_from_key($value);
+	$fname=self::get_symbol_from_key($value);
+
+	$ktype_len=max($ktype_len,strlen($ktype)+2);
+	$kname_len=max($kname_len,strlen($kname)+2);
+	$fname_len=max($fname_len,strlen($fname)+2);
+	}
+
+echo str_repeat('-',$ktype_len+$kname_len+$fname_len+8)."\n";
+echo '|'.str_pad('Type',$ktype_len,' ',STR_PAD_BOTH);
+echo '|'.str_pad('Name',$kname_len,' ',STR_PAD_BOTH);
+echo '| T ';
+echo '|'.str_pad('Defined in',$fname_len,' ',STR_PAD_BOTH);
+echo "|\n";
+echo '|'.str_repeat('-',$ktype_len);
+echo '|'.str_repeat('-',$kname_len);
+echo '|---';
+echo '|'.str_repeat('-',$fname_len);
+echo "|\n";
+
+foreach($this->symbols as $key => $value)
+	{
+	$ktype=ucfirst(self::get_type_string(self::get_type_from_key($key)));
+	$kname=self::get_symbol_from_key($key);
+
+	$ftype=self::get_type_from_key($value);
+	$fname=self::get_symbol_from_key($value);
+
+	echo '| '.str_pad(ucfirst($ktype),$ktype_len-1,' ',STR_PAD_RIGHT);
+	echo '| '.str_pad($kname,$kname_len-1,' ',STR_PAD_RIGHT);
+	echo '| '.$ftype.' ';
+	echo '| '.str_pad($fname,$fname_len-1,' ',STR_PAD_RIGHT);
+	echo "|\n";
+	}
+}
+//---
+// The same in HTML
+
+private function html_show($subfile_to_url_function=null)
+{
+echo "<h2>Global information</h2>";
+
+echo '<table border=0>';
+echo '<tr><td>Map version:&nbsp;</td><td>'
+	.htmlspecialchars($this->version).'</td></tr>';
+echo '<tr><td>Min reader version:&nbsp;</td><td>'
+	.htmlspecialchars($this->min_version).'</td></tr>';
+echo '<tr><td>Symbol count:&nbsp;</td><td>'
+	.$this->symbol_count().'</td></tr>';
+echo '</table>';
+
+echo "<h2>Options</h2>";
+echo '<pre>'.htmlspecialchars(print_r($this->options,true)).'</pre>';
+
+echo "<h2>Symbols</h2>";
+
+echo '<table border=1 bordercolor="#BBBBBB" cellpadding=3 '
+	.'cellspacing=0 style="border-collapse: collapse"><tr><th>Type</th>'
+	.'<th>Name</th><th>FT</th><th>Defined in</th></tr>';
+foreach($this->symbols as $key => $value)
+	{
+	$ktype=ucfirst(self::get_type_string(self::get_type_from_key($key)));
+	$kname=self::get_symbol_from_key($key);
+
+	$ftype=self::get_type_from_key($value);
+	$fname=self::get_symbol_from_key($value);
+
+	echo '<tr><td>'.$ktype.'</td><td>'.htmlspecialchars($kname)
+		.'</td><td align=center>'.$ftype.'</td><td>';
+	if (!is_null($subfile_to_url_function)) 
+		echo '<a href="'.call_user_func($subfile_to_url_function,$fname).'">';
+	echo htmlspecialchars($fname);
+	if (!is_null($subfile_to_url_function)) echo '</a>';
+	echo '</td></tr>';
+	}
+echo '</table>';
+}
+
+//---
+
+public function export($path=null)
+{
+self::validate($this->mnt);
+
+$this->realize();
+
+$file=(is_null($path) ? "STDOUT" : $path);
+$fp=fopen($file,'w');
+if (!$fp) throw new Exception("$file: Cannot open for writing");
+
+foreach($this->symbols as $key => $value) fwrite($fp,"$key $value\n");
+
+fclose($fp);
+}
+
+//---
+} // End of class Automap
+//===========================================================================
+
+// Registers the automap callback (needs SPL). We support only the SPL
+// registration process because defining an _autoload() function is too
+// intrusive.
+
+if (!defined('_AUTOMAP_DISABLE_REGISTER'))
+	{
+	if (!extension_loaded('spl'))
+		throw new Exception("Automap requires the SPL extension");
+
+	spl_autoload_register('Automap::autoload_hook');
+	}
+
+Automap::init();
+
+} // End of class_exists('Automap')
+//===========================================================================
+?>
+<?php
+//=============================================================================
+//
+// Copyright Francois Laupretre <automap@tekwire.net>
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+//=============================================================================
+/**
+* The Automap_Creator class
+*
+* This class creates map files
+*
+* @copyright Francois Laupretre <automap@tekwire.net>
+* @license http://www.apache.org/licenses/LICENSE-2.0 Apache License, V 2.0
+* @category Automap
+* @package Automap
+*/
+//============================================================================
+
+// <PLAIN_FILE> //---------------
+require_once(dirname(__FILE__).'/Automap.php');
+// </PLAIN_FILE> //---------------
+
+if (!class_exists('Automap_Creator',false)) 
+{
+//------------------------------------------
+
+class Automap_Creator
+{
+const VERSION='1.1.0';
+const MIN_VERSION='1.1.0'; // Minimum version of reader to understand the map
+
+//---------
+
+private $symbols=array();
+private $options=array();
+private $flags;
+
+//---------
+// Utilities (taken from PHK_Util)
+
+private static function atomic_write($path,$data)
+{
+$tmpf=tempnam(dirname($path),'tmp_');
+
+if (file_put_contents($tmpf,$data)!=strlen($data))
+	throw new Exception($tmpf.": Cannot write");
+
+// Windows does not support renaming to an existing file (looses atomicity)
+
+if (PHK_Util::is_windows()) @unlink($path);
+
+if (!rename($tmpf,$path))
+	{
+	unlink($tmpf);
+	throw new Exception($path.': Cannot replace file');
+	}
+}
+
+//---------
+// Creates an empty object
+
+public function __construct($flags=0)
+{
+$this->flags=$flags;
+}
+
+//---------
+
+public function add_option($key,$value)
+{
+$this->options[$key]=$value;
+}
+
+//---------
+
+public function set_options($options)
+{
+if (!is_array($options))
+	throw new Exception("set_options: arg should be an array");
+
+$this->options=$options;
+}
+
+//---------
+// Can be called with type/symbol or with type=null/symbol=key
+// Replace symbol even if previously defined
+
+public function add_entry($type,$symbol,$value,$exclude_list=null)
+{
+$key=is_null($type) ? $symbol : Automap::key($type,$symbol);
+
+if ((!is_null($exclude_list)) && (array_search($key,$exclude_list)!==false))
+	return;
+
+$this->symbols[$key]=$value;
+}
+
+//---------
+
+public function symbol_count()
+{
+return count($this->symbols);
+}
+
+//---------
+// Remove the entries contaning $value
+
+private function cleanup($value)
+{
+foreach(array_keys($this->symbols,$value) as $key) unset($this->symbols[$key]);
+}
+
+//---------
+
+public function get_mapfile($path,$flags=0)
+{
+$source_mnt=Automap::mount($path,null,null,$flags);
+$source_map=Automap::instance($source_mnt);
+$this->symbols=$source_map->symbols();
+$this->options=$source_map->options();
+
+Automap::umount($source_mnt);
+}
+
+//---------
+
+public function serialize()
+{
+$data=serialize(array('map' => $this->symbols
+	, 'options' => $this->options));
+
+return Automap::MAGIC.' M'.str_pad(self::MIN_VERSION,12).' V'
+	.str_pad(self::VERSION,12).' FS'.str_pad(strlen($data)+53,8).$data;
+}
+
+//---------
+
+public function dump($path)
+{
+$data=$this->serialize();
+
+self::atomic_write($path,$data);
+}
+
+//---------
+// Register an extension in current map.
+// $file=extension file (basename)
+
+public function register_extension_file($file)
+{
+echo "INFO: Registering extension file: $file\n";
+
+$value=Automap::key(Automap::F_EXTENSION,$file); // Key & value = same format
+$this->cleanup($value);
+
+$extension_list=get_loaded_extensions();
+
+@dl($file);
+$a=array_diff(get_loaded_extensions(),$extension_list);
+if (($ext_name=array_pop($a))===NULL)
+	throw new Exception($file.': Cannot load extension');
+
+$ext=new ReflectionExtension($ext_name);
+
+self::add_entry(Automap::T_EXTENSION,$ext_name,$value);
+
+foreach($ext->getFunctions() as $func)
+	self::add_entry(Automap::T_FUNCTION,$func->getName(),$value);
+
+foreach(array_keys($ext->getConstants()) as $constant)
+	self::add_entry(Automap::T_CONSTANT,$constant,$value);
+
+foreach($ext->getClasses() as $class)
+	{
+	self::add_entry(Automap::T_CLASS,$class->getName(),$value);
+	}
+}
+
+//---------
+// Register every extension files in the extension directory
+// We do several passes, as there are dependencies between extensions which
+// must be loaded in a given order. We stop when a pass cannot load any file.
+
+public function register_extension_dir()
+{
+$ext_dir=ini_get('extension_dir');
+echo "INFO: Scanning directory : $ext_dir\n";
+
+//-- Multiple passes because of possible dependencies
+//-- Loop until everything is loaded or we cannot load anything more
+
+$f_to_load=array();
+$pattern='\.'.PHP_SHLIB_SUFFIX.'$';
+foreach(scandir($ext_dir) as $ext_file)
+	{
+	if (is_dir($ext_dir.DIRECTORY_SEPARATOR.$ext_file)) continue;
+	if (ereg($pattern,$ext_file)!==false) $f_to_load[]=$ext_file;
+	}
+
+while(true)
+	{
+	$f_failed=array();
+	foreach($f_to_load as $key => $ext_file)
+		{
+		try { $this->register_extension_file($ext_file); }
+		catch (Exception $e) { $f_failed[]=$ext_file; }
+		}
+	//-- If we could load everything or if we didn't load anything, break
+	if ((count($f_failed)==0)||(count($f_failed)==count($f_to_load))) break;
+	$f_to_load=$f_failed;
+	}
+
+if (count($f_failed))
+	{
+	$msg="These extensions were not registered because they could"
+		." not be loaded :";
+	foreach($f_failed as $file)	$msg.=" $file";
+	trigger_error($msg,E_USER_WARNING);
+	}
+}
+
+//---------
+//-- This function extracts the function, class, and constant names out of a
+//-- PHP script.
+
+//-- States :
+
+const ST_OUT=1;						// Upper level
+const ST_FUNCTION_FOUND=Automap::T_FUNCTION; // Found 'function'. Looking for name
+const ST_SKIPPING_BLOCK_NOSTRING=3; // In block, outside of string
+const ST_SKIPPING_BLOCK_STRING=4;	// In block, in string
+const ST_CLASS_FOUND=Automap::T_CLASS;	// Found 'class'. Looking for name
+const ST_DEFINE_FOUND=6;			// Found 'define'. Looking for '('
+const ST_DEFINE_2=7;				// Found '('. Looking for constant name
+const ST_SKIPPING_TO_EOL=8;			// Got constant. Looking for EOL (';')
+
+const AUTOMAP_COMMENT='// *<Automap>:([^ ]+)(.*)$';
+
+//--
+
+public function register_script($file,$automap_path)
+{
+//echo "INFO: Registering script $file as $automap_path\n";//TRACE
+
+if (($buf=php_strip_whitespace($file))==='') return;
+
+// Force relative path
+
+$value=Automap::key(Automap::F_SCRIPT
+	,trim(str_replace('\\','/',$automap_path),'/\\'));
+
+$this->cleanup($value);
+
+// Register explicit declarations
+//Format:
+//	<double-slash> <Automap>:declare <type> <value>
+//	<double-slash> <Automap>:ignore <type> <value>
+//	<double-slash> <Automap>:no-auto-index
+//	<double-slash> <Automap>:skip-blocks
+
+$skip_blocks=false;
+$exclude_list=array();
+$regs=false;
+$line_nb=0;
+
+try {
+foreach(file($file) as $line)
+	{
+	$line_nb++;
+	$line=trim($line);
+	$lin=str_replace('	',' ',$line);	// Replace tabs with spaces
+	if (ereg(self::AUTOMAP_COMMENT,$line,$regs)===false) continue;
+
+	if ($regs[1]=='no-auto-index') return;
+
+	if ($regs[1]=='skip-blocks')
+		{
+		$skip_blocks=true;
+		continue;
+		}
+	$type=strtolower(strtok($regs[2],' '));
+	$name=strtok(' ');
+	if ($type===false || $name===false) throw new Exception('Needs 2 args');
+	$type_letter=Automap::string_to_type($type);
+	$key=Automap::key($type_letter,$name);
+	switch($regs[1])
+		{
+		case 'declare': // Add entry, even if set to be 'ignored'.
+			$this->add_entry(null,$key,$value);
+			break;
+
+		case 'ignore': // Ignore this symbol in autoindex stage.
+			$exclude_list[]=$key;
+			break;
+
+		default:
+			throw new Exception($regs[1].': Invalid Automap command');
+		}
+	}
+} catch (Exception $e)
+	{ throw new Exception("$file (line $line_nb): ".$e->getMessage()); }
+
+//-- Auto index
+
+$block_level=0;
+$state=self::ST_OUT;
+
+foreach(token_get_all($buf) as $token)
+	{
+	if (is_string($token))
+		{
+		$tvalue=$token;
+		$tnum=-1;
+		$tname='String';
+		}
+	else
+		{
+		list($tnum,$tvalue)=$token;
+		$tname=token_name($tnum);
+		}
+
+	if ($tnum==T_WHITESPACE || $tnum==T_COMMENT) continue;
+
+	//echo "$tname <$tvalue>\n";//TRACE
+	switch($state)
+		{
+		case self::ST_OUT:
+			switch($tnum)
+				{
+				case T_FUNCTION:
+					$state=self::ST_FUNCTION_FOUND; break;
+				case T_CLASS:
+				case T_INTERFACE:
+					$state=self::ST_CLASS_FOUND; break;
+				case T_STRING:
+					if ($tvalue=='define') $state=self::ST_DEFINE_FOUND;
+					break;
+				// If this flag is set, we skip anything enclosed
+				// between {} chars, ignoring any conditional block.
+				case -1:
+					if ($tvalue=='{' && $skip_blocks)
+						{
+						$state=self::ST_SKIPPING_BLOCK_NOSTRING;
+						$block_level=1;
+						}
+					break;
+				}
+			break;
+
+		case self::ST_FUNCTION_FOUND:
+		case self::ST_CLASS_FOUND:
+			if ($tnum==-1 && $tvalue=='&') break; //-- Function returning ref
+			if ($tnum==T_STRING)
+				$this->add_entry($state,$tvalue,$value,$exclude_list);
+			else trigger_error($file.": Cannot get name (type=$tname;value=$tvalue)"					,E_USER_WARNING);
+			$state=self::ST_SKIPPING_BLOCK_NOSTRING;
+			$block_level=0;
+			break;
+
+		case self::ST_SKIPPING_BLOCK_STRING:
+			if ($tnum==-1 && $tvalue=='"')
+				$state=self::ST_SKIPPING_BLOCK_NOSTRING;
+			break;
+
+		case self::ST_SKIPPING_BLOCK_NOSTRING:
+			if ($tnum==-1 || $tnum==T_CURLY_OPEN)
+				{
+				switch($tvalue)
+					{
+					case '"':
+						$state=self::ST_SKIPPING_BLOCK_STRING;
+						break;
+					case '{':
+						$block_level++;
+						//TRACE echo "block_level=$block_level\n";
+						break;
+					case '}':
+						$block_level--;
+						if ($block_level==0) $state=self::ST_OUT;
+						//TRACE echo "block_level=$block_level\n";
+						break;
+					}
+				}
+			break;
+
+		case self::ST_DEFINE_FOUND:
+			if ($tnum==-1 && $tvalue=='(') $state=self::ST_DEFINE_2;
+			else
+				{
+				trigger_error("Unrecognized token for constant definition (type=$tnum;value=$tvalue). Waited for '(' string"
+					,E_USER_WARNING);
+				$state=self::ST_SKIPPING_TO_EOL;
+				}
+			break;
+
+		case self::ST_DEFINE_2:
+			// Accept T_STRING, even if it is incorrect
+			if ($tnum==T_CONSTANT_ENCAPSED_STRING || $tnum==T_STRING)
+				{
+				$schar=$tvalue{0};
+				if ($schar=="'" || $schar=='"') $tvalue=trim($tvalue,$schar);
+				$this->add_entry(Automap::T_CONSTANT,$tvalue,$value,$exclude_list);
+				}
+			else trigger_error('Unrecognized token for constant definition '
+				."(type=$tname;value=$tvalue). Waited for string constant"
+				,E_USER_WARNING);
+			$state=self::ST_SKIPPING_TO_EOL;
+			break;
+
+		case self::ST_SKIPPING_TO_EOL:
+			if ($tnum==-1 && $tvalue==';') $state=self::ST_OUT;
+			break;
+		}
+	}
+}
+
+//---------
+// Here, we must use 'Automap' and not 'parent' because the package always
+// registers its map via Automap::mount()
+
+public function register_package($file,$automap_path)
+{
+$value=Automap::key(Automap::F_PACKAGE,trim($automap_path,'/\\'));
+
+// We use the same mount point for packages and automaps
+
+$mnt=require($file);
+if (Automap::is_mounted($mnt)) // If package has an automap
+	{
+	foreach(array_keys(Automap::instance($mnt)->symbols()) as $key)
+		{
+		//var_dump($key);//TRACE
+		$this->add_entry(null,$key,$value);
+		}
+	}
+else echo "No automap found in package\n";
+}
+
+//---------
+
+public function import($path)
+{
+$fp=is_null($path) ? STDIN : fopen($path,'r');
+
+while(($line=fgets($fp))!==false)
+	{
+	if (($line=trim($line))==='') continue;
+	list($key,$value)=explode(' ',$line,2);
+	$this->add_entry(null,$key,$value);
+	}
+if (!is_null($path)) fclose($fp);
+}
+
+//---------
+} // End of class Automap_Creator
+//===========================================================================
+} // End of class_exists('Automap_Creator')
+//===========================================================================
+?>
+<p align="center">
+Apache License<br />
+Version 2.0, January 2004<br />
+<a href="http://www.apache.org/licenses/">http://www.apache.org/licenses/</a>
+</p>
+<p>
+TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+</p>
+<p><b><a name="definitions">1. Definitions</a></b>.</p>
+<p>
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+</p>
+<p>
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+</p>
+<p>
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+</p>
+<p>
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+</p>
+<p>
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+</p>
+<p>
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+</p>
+<p>
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+</p>
+<p>
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+</p>
+<p>
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+</p>
+<p>
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+</p>
+<p><b><a name="copyright">2. Grant of Copyright License</a></b>.
+Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+</p>
+<p><b><a name="patent">3. Grant of Patent License</a></b>.
+Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+</p>
+<p><b><a name="redistribution">4. Redistribution</a></b>.
+You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+<ol type="a">
+<li>You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+<br /> <br /></li>
+
+<li>You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+<br /> <br /></li>
+
+<li>You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+<br /> <br /></li>
+
+<li>If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.</li>
+</ol>
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+</p>
+<p><b><a name="contributions">5. Submission of Contributions</a></b>.
+Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+</p>
+<p><b><a name="trademarks">6. Trademarks</a></b>.
+This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+</p>
+<p><b><a name="no-warranty">7. Disclaimer of Warranty</a></b>.
+Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+</p>
+<p><b><a name="no-liability">8. Limitation of Liability</a></b>.
+In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+</p>
+<p><b><a name="additional">9. Accepting Warranty or Additional Liability</a></b>.
+While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+</p>
+<p>
+END OF TERMS AND CONDITIONS
+</p>
+</div>
+
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+<?php
+//=============================================================================
+//
+// Copyright Francois Laupretre <automap@tekwire.net>
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+//
+//=============================================================================
+/**
+* The main script to build and manage automaps. This script is a wrapper around
+* the Automap_Creator class.
+*
+* @copyright Francois Laupretre <automap@tekwire.net>
+* @license http://www.apache.org/licenses/LICENSE-2.0 Apache License, V 2.0
+* @category Automap
+* @package Automap
+*/
+//============================================================================
+
+// <PLAIN_FILE> //---------------
+require_once(dirname(__FILE__).'/../classes/Automap_Creator.php');
+// </PLAIN_FILE> //---------------
+
+//---------
+// <Automap>:ignore function send_error
+
+function send_error($msg,$usage=true)
+{
+if ($usage) usage($msg);
+else echo "** ERROR: $msg\n";
+exit(1);
+}
+
+//---------
+// <Automap>:ignore function usage
+
+function usage($msg=null)
+{
+if (!is_null($msg)) echo "** ERROR: $msg\n";
+
+echo "\nUsage: <action> <params...>\n";
+echo "\nActions :\n\n";
+echo "	- showmap <map file>\n";
+echo "	- register_extensions <map file> (must be executed with 'php -n -d extension_dir=<dir>'\n";
+echo "	- register_scripts <map file> <base dir> <relative file paths...>\n";
+echo "	- export <map file> [output_file]\n";
+echo "	- import <map file> [source_file]\n";
+echo "	- help\n\n";
+
+exit(is_null($msg) ? 0 : 1);
+}
+
+//---------
+// Main
+
+ini_set('display_errors',true);
+
+try
+{
+array_shift($_SERVER['argv']);
+$action=(count($_SERVER['argv'])) ? array_shift($_SERVER['argv']) : 'help';
+$mapfile=(array_key_exists(0,$_SERVER['argv'])) ? $_SERVER['argv'][0] : null;
+
+switch($action)
+	{
+	case 'showmap': //-- display <map file>
+		if (is_null($mapfile)) send_error(null);
+		$mnt=Automap::mount($mapfile);
+		Automap::instance($mnt)->show();
+		break;
+
+	case 'register_extensions':
+		//-- Must be executed with :
+		//-- php -n -d <Extension_dir> Automap_Builder.php register_extensions
+		//-- in order to ignore extension preloading directives in php.ini
+		//-- (if an extension is already loaded, we cannot determine which file
+		//-- it came from). The '-d' flag is mandatory as long as PHP cannot
+		//-- dl() outside of 'extension_dir'.
+
+		if (is_null($mapfile)) send_error(null);
+		$mf=new Automap_Creator();
+		$mf->register_extension_dir();
+		$mf->dump($mapfile);
+		break;
+
+	case 'register_scripts':
+		//-- register_scripts <map file> <$base> <script files (relative paths)>
+
+		if (is_null($mapfile)) send_error(null);
+		array_shift($_SERVER['argv']);
+		$base=$_SERVER['argv'][0];
+		$mf=new Automap_Creator();
+		if (file_exists($mapfile)) $mf->get_mapfile($mapfile);
+
+		array_shift($_SERVER['argv']);
+		foreach($_SERVER['argv'] as $rfile)
+			{
+			$abs_path=$base.DIRECTORY_SEPARATOR.$rfile;
+			$a=glob($abs_path);
+			if (count($a)==0) throw new Exception($abs_path.': No such file');
+			foreach($a as $afile) $mf->register_script($afile,$rfile);
+			}
+		$mf->dump($mapfile);
+		break;
+
+	case 'export': //-- export [<map file>]
+		if (is_null($mapfile)) send_error(null);
+		$output=isset($_SERVER['argv'][1]) ? $_SERVER['argv'][1] : null;
+		Automap::instance(Automap::mount($mapfile))->export($output);
+		break;
+
+	case 'import': //-- import <map file>
+		if (is_null($mapfile)) send_error(null);
+		$mf=new Automap_Creator();
+		array_shift($_SERVER['argv']);
+		foreach($_SERVER['argv'] as $rfile) $mf->import($rfile);
+		$mf->dump($mapfile);
+		break;
+
+	case 'help':
+		usage();
+		break;
+
+	default:
+		send_error("Unknown action: '$action'");
+	}
+}
+catch(Exception $e)
+	{
+	if (getenv('AUTOMAP_DEBUG')!==false) throw $e;
+	else send_error($e->getMessage(),false);
+	}
+
+//============================================================================
+?>
