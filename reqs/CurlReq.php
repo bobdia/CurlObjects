@@ -55,7 +55,7 @@ class CurlReq {
 	}
 
 	// set a proxy
-	public function proxy($ip, $port, $userpwd=null,$tunnel=false,$socks=CURLPROXY_SOCKS5) {
+	public function proxy($ip, $port, $userpwd=false, $tunnel=false, $socks=false) {
 		$this->options[CURLOPT_PROXY] = $ip;
 		$this->options[CURLOPT_PROXYPORT] = $port;
 		
@@ -66,8 +66,10 @@ class CurlReq {
 		if($tunnel) {
 			$this->options[CURLOPT_HTTPPROXYTUNNEL] = 1;
 		}
-		
-		$this->options[CURLOPT_PROXYTYPE] = $socks;
+		if($socks) {
+			//CURLPROXY_SOCKS5
+			$this->options[CURLOPT_PROXYTYPE] = $socks;
+		}if($tunnel) {
 	}
 	
 	// set local network interface to use
