@@ -64,7 +64,6 @@ class CurlBase {
 ** Constructor
 */
 	public function __construct($requests=null,$options=null) {
-		set_time_limit($this->maxTime);
 
 		if($requests)
 			$this->addArr($requests);
@@ -141,8 +140,8 @@ class CurlBase {
 					}
 
 					// delay if needed
-					if($this->delayBetweenChunks > 0) {
-						sleep($this->delayBetweenChunks);
+					if($this->delayChunks > 0) {
+						sleep($this->delayChunks);
 					}
 				}
 			}
@@ -267,8 +266,8 @@ class CurlBase {
 			$req = $this->requests[$k];
 			
 			if(!$this->multi) {
-				if($this->delayBetweenSingle > 0) {
-					sleep($this->delayBetweenSingle);
+				if($this->delaySingle > 0) {
+					sleep($this->delaySingle);
 				}
 				
 				$req->exec();

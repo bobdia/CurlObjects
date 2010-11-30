@@ -9,7 +9,7 @@ public static function profile(&$request, $options) {
 		}
 		
 		if(isset($options['ip'])) $request->ip($options['ip']);
-		if(isset($options['proxy'])) $request->proxy($options['proxy']);
+		if(isset($options['proxy'])) $request->proxy($options['proxy'][0], $options['proxy'][1], $options['proxy'][2], $options['proxy'][3]);
 		if(isset($options['ua'])) $request->ua($options['ua']);
 		if(isset($options['cookieFile'])) $request->cookieFile = $options['cookieFile'];
 		if(isset($options['lang'])) {
@@ -21,7 +21,7 @@ public static function profile(&$request, $options) {
 		if(isset($options['ajax'])) {
 			$headers[] = 'X-Requested-With: XMLHttpRequest';
 		}
-		$request->options[CURLOPT_HTTPHEADERS] = $options['headers'];
+		$request->options[CURLOPT_HTTPHEADER] = $options['headers'];
 		return $request;
 }
 
