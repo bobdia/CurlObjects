@@ -26,8 +26,8 @@ class HttpReq extends CurlReq {
 	public $stringPost = true;
 	
 	public $rawUrlEncode = false; // whether to use urlencode() or rawurlencode()
-	public $argsSeparator; // default is '&'
-	public $argsArraySeparator; // default is '[]'
+	public $argsSeparator = '&'; // default is '&'
+	public $argsArraySeparator = '[]'; // default is '[]'
 
 
 	public $parseHeaders = true; // set to true to parse headers
