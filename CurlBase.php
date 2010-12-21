@@ -102,7 +102,10 @@ class CurlBase {
 	// add a CurlRequest
 	public function add(&$request, $id=null) {
 		if(!isset($id)) { $id = $this->rCount; }
-		
+		// Attach default callbacks
+		foreach($this->defaultAttach as $at) {
+			$request->attach($at[0], $at[1], $at[2]);
+		}
 		$this->requests[$id] = $request;
 		$this->requests[$id]->_id = $id;
 		$this->active($id, TRUE);
@@ -161,9 +164,9 @@ class CurlBase {
 					} while(count($this->active)>0);
 
 					// Callback for cleanup between chunks
-					if($this->callbackBetweenChunks) {
+					if($this->chunkCallback) {
 						// pass a reference to $this CurlBase as the only argument
-						call_user_func_array($this->callbackBetweenChunks, array($this));
+						call_user_func_array($this->chunkCallback, array($this));
 					}
 
 					// delay if needed
@@ -226,11 +229,6 @@ class CurlBase {
 	protected function prepareRequests() {
 		foreach(array_keys($this->active) as $k) {
 			$req = $this->requests[$k];
-			
-			// Attach default callbacks
-			foreach($this->defaultAttach as $at) {
-				$req->attach($at[0], $at[1], $at[2]);
-			}
 			
 			// Trigger before event
 			$req->event('before');
