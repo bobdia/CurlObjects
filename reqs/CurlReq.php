@@ -27,7 +27,8 @@ class CurlReq {
 			'decide' => array(0),
 			'success' => array(0),
 			'emptybody' => array(0),
-			'after' => array(0)
+			'after' => array(0),
+			'fail' => array(0)
 			);
 
 	public $logEvents = false; // enable/disable event logging
