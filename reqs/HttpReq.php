@@ -57,7 +57,8 @@ class HttpReq extends CurlReq {
 			'success' => array(0),
 			'emptybody' => array(0),
 			'httperror' => array(0),
-			'after' => array(0)
+			'after' => array(0),
+			'fail' => array(0)
 			);
 
 	public function __construct($url, $options=null) {
