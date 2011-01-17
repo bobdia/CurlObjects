@@ -223,9 +223,7 @@ class CurlBase {
 			return true;
 		}
 	}
-	
 
-	
 	protected function prepareRequests() {
 		foreach(array_keys($this->active) as $k) {
 			$req = $this->requests[$k];

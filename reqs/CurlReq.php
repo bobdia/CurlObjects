@@ -156,7 +156,7 @@ class CurlReq {
 		$this->event('before');
 		
 		// init
-		if($this->execCount == 0) {
+		if(!is_resource($this->_handle)) {
 			$this->_handle = $this->initHandle();
 		}
 		
