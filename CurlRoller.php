@@ -1,14 +1,14 @@
 <?php
 /**
- * CurlBase
+ * CurlRoller
  *
- * This class handles groups of CurlRequest objects. You can execute them concurrently
- * or not, add default cURL options, attach default event callbacks and more.
+ * This class concurrently executes CurlRequest objects. You can add default 
+ * cURL options, attach default event callbacks and more.
  *
  * @package	CurlObjects
  * @author	Robert Diaes
  */
-class CurlBase {
+class CurlRoller {
 	/**
 	 * @var int Maximum number of requests that will run concurrently.
 	 */
@@ -44,7 +44,7 @@ class CurlBase {
 	 * @var array Format is CURL_CONSTANT => value
 	 */
 	public $defaultOptions = array(
-				//CURLOPT_RETURNTRANSFER => true
+			// CURLOPT_RETURNTRANSFER => true
 	);
 	/**
 	 * Default callbacks

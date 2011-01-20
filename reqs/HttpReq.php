@@ -3,7 +3,8 @@
 
 class HttpReq extends CurlReq {
 	/* Options */
-
+	public $method = 'get'; // HTTP method to use
+	
 	public $options = array(
 			CURLOPT_RETURNTRANSFER => 1,
 			CURLOPT_HEADER => 1,
@@ -13,42 +14,37 @@ class HttpReq extends CurlReq {
 			CURLOPT_ENCODING => '',
 			CURLOPT_SSL_VERIFYHOST => 0,
 			CURLOPT_SSL_VERIFYPEER => 0
-			/*CURLOPT_HTTP_VERSION  	 
-				CURL_HTTP_VERSION_NONE  (default, lets CURL decide which version to use), 
-				CURL_HTTP_VERSION_1_0  (forces HTTP/1.0), or CURL_HTTP_VERSION_1_1  (forces HTTP/1.1).
+			/*	CURLOPT_HTTP_VERSION
+					CURL_HTTP_VERSION_NONE  (default, lets CURL decide which version to use),
+					CURL_HTTP_VERSION_1_0  (forces HTTP/1.0)
+					CURL_HTTP_VERSION_1_1  (forces HTTP/1.1).
 			*/
 			);
 	
-	
-	public $method = 'get'; // HTTP method to use
 	public $args; // assoc. array of HTTP parameters, used for both GET and POST
-	// Passing an array to CURLOPT_POSTFIELDS will encode the data as multipart/form-data, while passing a URL-encoded string will encode the data as application/x-www-form-urlencoded. 
+	// Passing an array to CURLOPT_POSTFIELDS will encode the data as multipart/form-data, 
+	// while passing a URL-encoded string will encode the data as application/x-www-form-urlencoded. 
 	public $stringPost = true;
-	
-	public $rawUrlEncode = false; // whether to use urlencode() or rawurlencode()
 	public $argsSeparator = '&'; // default is '&'
-	public $argsArraySeparator = '[]'; // default is '[]'
-
-
+	public $argsArray = '[]'; // default is '[]'
+	
+	public $cookieFile; // full path to cookie file
+	
 	public $parseHeaders = true; // set to true to parse headers
 	public $parseCookies = true; // set to true to parse cookies, needs an assoc array in $headers
-	public $parseDOM = false; // set to true to parse the DOM,
-	public $parseForms = false; // set to true to parse html forms,
-
+	public $parseDOM = false; // 'php' = DOMDocument, 'xml' = SimpleXML, 'simple' = simplehtmldom
+	
 	/* Data */
 	public $cookies; // cookies assoc arrays
 	public $headers; // headers assoc arrays
-	public $dom; // DOM object | http://simplehtmldom.sourceforge.net/
-	public $forms; // parsed HTML forms
-
+	public $dom; // DOM object
+	
 	public $body; // body string
 	public $head; // headers string
-
+	
 	public $status; // HTTP status code
 	public $info; // cURL handle info array
 	
-	public $cookieFile; // full path to cookie file
-
 	public $events = array(
 			'before' => array(0),
 			'curlerror' => array(0),
@@ -60,7 +56,7 @@ class HttpReq extends CurlReq {
 			'after' => array(0),
 			'fail' => array(0)
 			);
-
+	
 	public function __construct($url, $options=null) {
 		parent::__construct($url,$options);
 	}
@@ -68,32 +64,31 @@ class HttpReq extends CurlReq {
 	/* Helpers */
 	
 	// create a cookie file
+	// warning: you have to clean up temp files yourself
 	public function cookieFile($dir=null,$prefix=null) {
 		if(!$dir) { $dir = getcwd(); }
 		if(!$prefix) { $prefix = get_class(); }
-
 		$this->cookieFile = tempnam($dir,$prefix);
 		return $this->cookieFile;
 	}
 	
-	// sets a cookie from string
-	public function cookie($str) {
-		$this->options[CURLOPT_COOKIE] = $str;
-	}
-	
-	// sets a cookie from $this->cookies array
-	public function cookies($cookieArr,$deep=false) {
-		$merged = '';
-		if($deep) {
-			foreach($cookieArr as $arr) {
-				foreach($arr as $k=>$v) {
+	// sets a cookie from a string or $this->cookies array
+	public function cookie($cookieArray,$deep=false) {
+		if(is_array($cookieArray)) {
+			$merged = '';
+			if($deep) {
+				foreach($cookieArr as $arr) {
+					foreach($arr as $k=>$v) {
+						$merged .= $k.'='.$v.'; ';
+					}
+				}
+			} else {
+				foreach($cookieArr as $k=>$v) {
 					$merged .= $k.'='.$v.'; ';
 				}
 			}
 		} else {
-			foreach($cookieArr as $k=>$v) {
-				$merged .= $k.'='.$v.'; ';
-			}
+			$merged = (string) $cookieArray;
 		}
 		$this->options[CURLOPT_COOKIE] = rtrim($merged);
 	}
@@ -107,54 +102,33 @@ class HttpReq extends CurlReq {
 			$this->options[CURLOPT_HTTPAUTH] = CURLAUTH_ANY;
 		}
 	}
-
+	
 	// sets useragent
 	public function ua($str) {
 		$this->options[CURLOPT_USERAGENT] = $str;
 	}
-
+	
 	// sets referer
 	public function ref($str) {
 		$this->options[CURLOPT_REFERER] = $str;
 	}
 	
-	// follows a link, requires DOM to be parsed
-	public function follow($query,$index=0,$attr='href') {
-		if($this->dom) {
-			$e = $this->dom->find($query,$index);
-			$this->url = $e->$attr;
-			$this->keep = true;
-		} else {
-			$this->logError(1009,'Must parse DOM to use follow()');
-		}
-	}
-	
-	/*
-	TODO
-	public function submit($form) {
-		if($this->forms) {}
-	}
-	*/
-
 	/* Callbacks */
 	
 	// If no curl error and http status code >= 400
 	protected function httperror($code) {
 		$this->logError(1001, "HTTP error: $code");
 		$this->keep = false;
-
 		if($this->singleFail) {
-			$this->event('fail', array('emptybody'));
+			$this->event('fail', array('httperror'));
 		}
 	}
-
+	
 	// If no curl error happens
 	protected function parse($response, $info) {
 		$this->info = $info;
 		$this->status = $info['http_code'];
-		
 		$k = $this->isReturnTransfer();
-		
 		if(isset($this->options[CURLOPT_HEADER]) && $k) {
 			// possibly dangerous
 			$this->head = substr($response,0,$info['header_size']);
@@ -162,15 +136,15 @@ class HttpReq extends CurlReq {
 		} elseif($k) {
 			$this->body = $response;
 		}
-
 		if($this->head && $this->parseHeaders) {
-			$this->headers = CurlUtil::headers($this->head);
+			$this->headers = HttpReq::parseHeaders($this->head);
 		}
 		if($this->headers && $this->parseCookies) {
-			$this->cookies = CurlUtil::cookies($this->headers);
+			$this->cookies = HttpReq::parseCookies($this->headers);
 		}
-
-
+		if($this->body && $this->parseDOM) {
+			$this->dom = HttpReq::parseDOM($this->body, $this->parseDOM);
+		}
 	}
 	
 	protected function decide() {
@@ -179,15 +153,8 @@ class HttpReq extends CurlReq {
 		} elseif($this->isReturnTransfer() && empty($this->body)) {
 			$this->event('emptybody');
 		} else {
-			if($this->parseDOM && $this->body) {
-				$this->dom = CurlUtil::parseDOM($this->body);
-			}
-			if($this->parseForms && $this->body) {
-				$this->forms = CurlUtil::parseForms($this->body);
-			}
 			$this->event('success');
 		}	
-	
 	}
 	
 	// set curl options and do magic
@@ -195,59 +162,152 @@ class HttpReq extends CurlReq {
 		if(is_array($defaults)) {
 			$this->options = $defaults + $this->options;
 		}
-		
-		if($this->method == 'get') {
-			
+		switch(strtolower($this->method)) {
+		case 'get':
 			$this->options[CURLOPT_HTTPGET] = 1;
-			
 			if(isset($this->options[CURLOPT_POST])) {
 				unset($this->options[CURLOPT_POST]);
 			}
-			
 			if(isset($this->options[CURLOPT_POSTFIELDS])) {
 				unset($this->options[CURLOPT_POSTFIELDS]);
 			}
-			
 			if($this->args) {
 				// possibly dangerous
 				// this could introduce problems if you are making a very special GET url
-				$this->cleanGetArgs();
-				
-				$this->url = $this->url.'?'.CurlUtil::vars($this->args, $this->rawUrlEncode, $this->argsSeparator, $this->argsArraySeparator);
+				$this->url = HttpReq::cleanGetArgs($this->url);
+				$this->url .= '?' . HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsArray);
 			}
-			
-		} elseif($this->method == 'post') {
+			break;
+		case 'post':
 			$this->options[CURLOPT_POST] = 1;
-			
 			if(isset($this->options[CURLOPT_HTTPGET])) {
 				unset($this->options[CURLOPT_HTTPGET]);
 			}
-			
 			if($this->args) {
 				if($this->stringPost) {
-					$this->options[CURLOPT_POSTFIELDS] = CurlUtil::vars($this->args, $this->rawUrlEncode, $this->argsSeparator, $this->argsArraySeparator );
+					$this->options[CURLOPT_POSTFIELDS] = HttpReq::vars($this->args, $this->argsSeparator, $this->argsArray);
 				} else {
-					$this->options = $this->args;
+					$this->options[CURLOPT_POSTFIELDS] = $this->args;
 				}
 			}
-			
+			break;
 		}
-
 		$this->options[CURLOPT_URL] = $this->url;
-
 		if($this->cookieFile) {
 			// possibly dangerous if cookiejar is used by many reqs, might overwrite newer data
 			$this->options[CURLOPT_COOKIEFILE] = $this->cookieFile;
 			$this->options[CURLOPT_COOKIEJAR] = $this->cookieFile;
 		}
-		
 		return $this->options;
 	}
 	
-	protected function cleanGetArgs() {
-		if(($p = strpos($this->url, '?')) !== false) {
-			$this->url = substr($this->url, 0, $p);
+	/* Utility methods */
+	
+	static public function cleanGetArgs($url) {
+		if(($p = strpos($url, '?')) !== false) {
+			$url = substr($url, 0, $p);
 		}
+		return $url;
+	}
+	
+	static public function encodeArgs($args, $sep='&',$suffix='[]') {
+		$str = '';
+		foreach( $args as $k => $v) {
+			if(is_array($v)) {
+				foreach($v as $ki => $vi) {
+					if(!is_int($ki)) {
+						$arraySuffix = $suffix[0] . $ki . $suffix[1];
+					} else {
+						$arraySuffix = $suffix;
+					}
+					$str .= urlencode($k) . $arraySuffix.'='. urlencode($vi) . $sep;
+				}
+			} else {
+				$str .= urlencode($k) . '=' . urlencode($v) . $sep;
+			}
+		}
+		return substr($str, 0, -1);
+	}
+	
+	static public function parseHeaders($head) {
+		//$str = str_replace("\r\n","\n",$str);
+		$h = array_filter(explode("\r\n",$str));
+		$headers = array();
+		$c = -1;
+		foreach($h as $i) {
+			if(($p = strpos($i, ':')) !== false) {
+				$type = trim(strtolower(substr($i,0,$p)));
+				$headers[$c][$type][] = trim(substr($i,$p+1));
+			} else {
+				$c++;
+				$parts  = explode(' ', $i,3);
+				$headers[$c]['http'] = array(
+					'version' => $parts[0],
+					'status' => $parts[1],
+					'string' => $parts[2]
+					); 
+			}
+		}
+		return $headers;
+	}
+	
+	static public function parseCookies($headers, $other=false) {
+		$cookies = array();
+		foreach($headers as $i => $headers) {
+			if(!isset($headers['set-cookie']))
+				continue;
+			foreach($headers['set-cookie'] as $str) {
+				if( strpos($str,';') === false) {
+					$c = explode('=',$str,2);
+					$c[0] = trim($c[0]);
+					$c[1] = trim($c[1]);
+					$cookies[$i][$c[0]] = $c[1];
+				} else {
+					$cookieparts = explode( ';', $str );
+
+					foreach($cookieparts as $data ) {
+						$c = explode( '=', $data, 2);
+						$c[0] = trim($c[0]);
+						$c[1] = trim($c[1]);
+						if($other && in_array( $c[0], array('domain', 'expires', 'path', 'secure', 'comment'))) {
+							switch($c[0]) {
+							case 'expires':
+								$c[1] = strtotime($c[1]);
+								break;
+							case 'secure':
+								$c[1] = true;
+								break;
+							}
+							$cookies[$i][$c[0]] = $c[1];
+						} else {
+							$cookies[$i][$c[0]] = $c[1];
+						}
+					}
+				}
+			}
+		}
+		return $cookies;
+	}
+	
+	static public function parseDOM($html, $parser){
+		if($parser == 'php') {
+			libxml_use_internal_errors(true);
+			$dom = new DOMDocument;
+			if( $dom->loadHTML($html) !== false) {
+				return $dom;
+			}
+		} elseif($parser == 'simple') {
+			// http://simplehtmldom.sourceforge.net/manual.htm
+			if($dom = str_get_html($html)) {
+				return $dom;
+			}
+		} elseif($parser == 'xml') {
+			libxml_use_internal_errors(true);
+			if(($dom = simplexml_load_string($html)) !== false) {
+				return $dom;
+			}
+		}
+		$this->logError(1008,'Failed to parse DOM. Parser:' . $parser);
 	}
 }
 ?>

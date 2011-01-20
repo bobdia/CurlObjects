@@ -9,16 +9,11 @@ $loaded = array();
 
 $activeUtils = array(
 	'profile' => 0,
-	'vars' => 0,
 	'varsToArray' => 0,
-	'headers' => 0,
-	'cookies'=> array( 'utils' => array('headers')),
 	'discoverInterfaces' => 0,
-	//'links' => array( 'utils' => array('resolveUrl')),
-	//'resolveUrl' => array( 'utils' => array('glueUrl')),
-	//'glueUrl' => 0,
-	'parseDOM' => array( 'classes' => array('simple_html_dom')),
-	//'parseForms' => array( 'classes' => array('class.HtmlFormParser'))
+	'links' => array( 'utils' => array('resolveUrl')),
+	'resolveUrl' => array( 'utils' => array('glueUrl')),
+	'glueUrl' => 0,
 	);
 
 
