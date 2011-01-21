@@ -1,0 +1,1 @@
+<?php$shortopt = 'o::u::r:e:';$longopt = array('objects::', 'util::', 'req:', 'extend:');$args = getopt($shortopt, $longopt);if(isset($args['req'])) {	if(isset($args['extends'])) {		$baseReq = $args['extend'];	} else {		$baseReq = 'HttpReq';	}}if(isset($args['objects'])) {}if(isset($args['util'])) {}?>
