@@ -229,7 +229,7 @@ class HttpReq extends CurlReq {
 		return substr($str, 0, -1);
 	}
 	
-	static public function parseHeaders($head) {
+	static public function parseHeaders($str) {
 		//$str = str_replace("\r\n","\n",$str);
 		$h = array_filter(explode("\r\n",$str));
 		$headers = array();
