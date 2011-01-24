@@ -20,13 +20,15 @@ class HttpReq extends CurlReq {
 					CURL_HTTP_VERSION_1_1  (forces HTTP/1.1).
 			*/
 			);
-	
-	public $args; // assoc. array of HTTP parameters, used for both GET and POST
-	// Passing an array to CURLOPT_POSTFIELDS will encode the data as multipart/form-data, 
-	// while passing a URL-encoded string will encode the data as application/x-www-form-urlencoded. 
+	// assoc. array of HTTP parameters, used for both GET and POST
+	public $args; 
+	// Passing an array to CURLOPT_POSTFIELDS will send the data as multipart/form-data, 
+	// while passing a URL-encoded string will send the data
+	// as application/x-www-form-urlencoded. 
 	public $stringPost = true;
 	public $argsSeparator = '&'; // default is '&'
 	public $argsArray = '[]'; // default is '[]'
+	public $argsType = PHP_QUERY_RFC1738; // PHP_QUERY_RFC1738 or PHP_QUERY_RFC3986
 	
 	public $cookieFile; // full path to cookie file
 	
@@ -185,7 +187,7 @@ class HttpReq extends CurlReq {
 			}
 			if($this->args) {
 				if($this->stringPost) {
-					$this->options[CURLOPT_POSTFIELDS] = HttpReq::vars($this->args, $this->argsSeparator, $this->argsArray);
+					$this->options[CURLOPT_POSTFIELDS] = HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsArray);
 				} else {
 					$this->options[CURLOPT_POSTFIELDS] = $this->args;
 				}
