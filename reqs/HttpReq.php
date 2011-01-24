@@ -27,8 +27,9 @@ class HttpReq extends CurlReq {
 	// as application/x-www-form-urlencoded. 
 	public $stringPost = true;
 	public $argsSeparator = '&'; // default is '&'
-	public $argsArray = '[]'; // default is '[]'
+	public $argsArray = null; // default is '[]' (urlencoded), can be two-character string or array
 	public $argsType = PHP_QUERY_RFC1738; // PHP_QUERY_RFC1738 or PHP_QUERY_RFC3986
+	public $argsPrefix = null;
 	
 	public $cookieFile; // full path to cookie file
 	
@@ -177,7 +178,7 @@ class HttpReq extends CurlReq {
 				// possibly dangerous
 				// this could introduce problems if you are making a very special GET url
 				$this->url = HttpReq::cleanGetArgs($this->url);
-				$this->url .= '?' . HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsArray);
+				$this->url .= '?' . HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsType, $this->argsArray, $this->argsPrefix);
 			}
 			break;
 		case 'post':
@@ -187,7 +188,7 @@ class HttpReq extends CurlReq {
 			}
 			if($this->args) {
 				if($this->stringPost) {
-					$this->options[CURLOPT_POSTFIELDS] = HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsArray);
+					$this->options[CURLOPT_POSTFIELDS] = HttpReq::encodeArgs($this->args, $this->argsSeparator, $this->argsType, $this->argsArray, $this->argsPrefix);
 				} else {
 					$this->options[CURLOPT_POSTFIELDS] = $this->args;
 				}
@@ -212,8 +213,13 @@ class HttpReq extends CurlReq {
 		return $url;
 	}
 	
-	static public function encodeArgs($args, $sep='&',$suffix='[]') {
-		$str = '';
+	static public function encodeArgs($args, $sep='&', $enc=PHP_QUERY_RFC1738, $suffix=null, $prefix=null) {
+		$str = http_build_query($args, $prefix, $sep, $enc);
+		if(!is_null($suffix)) {
+			$str = str_replace(array('%5B', '%5D'), array($suffix[0], $suffix[1]), $str);
+		}
+		return $str;
+		/*
 		foreach( $args as $k => $v) {
 			if(is_array($v)) {
 				foreach($v as $ki => $vi) {
@@ -228,7 +234,9 @@ class HttpReq extends CurlReq {
 				$str .= urlencode($k) . '=' . urlencode($v) . $sep;
 			}
 		}
+		
 		return substr($str, 0, -1);
+		*/
 	}
 	
 	static public function parseHeaders($str) {
